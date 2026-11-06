@@ -1,0 +1,54 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+
+# Environment Variables & Secrets
+.env
+*.env.local
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Logs
+logs/
+*.log
+
+# Databases & Runtime Storage
+*.db
+*.sqlite
+*.sqlite3
+storage/*.db
+storage/*.sqlite3
+
+# Video, Image, and Capture Artifacts
+captures/
+data/
+*.mp4
+*.mkv
+*.avi
+*.webm
+*.png
+*.jpg
+*.jpeg
+
+# IDE & OS Files
+.idea/
+.vscode/
+*.swp
+*.swo
+Thumbs.db
+desktop.ini
+

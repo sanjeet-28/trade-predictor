@@ -1,0 +1,115 @@
+# ==============================================================================
+# Forex Trade Detection & Telegram Notification System - Configuration Template
+# ==============================================================================
+
+stream:
+  # Primary target YouTube livestream
+  primary_url: "https://www.youtube.com/watch?v=3H4IVQejlDE"
+  # Fallback channel URL for discovery and reference
+  channel_url: "https://www.youtube.com/@DTradingTips"
+  # Frame dimensions for processing and chart recognition
+  frame_width: 1280
+  frame_height: 720
+  # Pixel format piped from FFmpeg (bgr24 or rgb24)
+  pixel_format: "bgr24"
+  # Frame sampling rate (FPS) piped from FFmpeg (1.0 FPS is optimal for charts)
+  frame_sample_rate_fps: 1.0
+  # Network and stream reconnect settings
+  reconnect_backoff_initial_sec: 5.0
+  reconnect_backoff_max_sec: 60.0
+  # Freeze detection: max seconds with identical frame MSE before alerting
+  freeze_threshold_sec: 30.0
+  # Freeze MSE sensitivity threshold (strict identity: <= 0.001)
+  freeze_mse_threshold: 0.001
+  # Minimum average brightness (0-255) below which frame is flagged as black screen
+  black_frame_threshold: 2.0
+  # Maximum allowed delay in seconds before triggering a frame lag warning
+  max_frame_delay_sec: 10.0
+  # Optional local video file path (overrides YouTube stream when testing)
+  local_video_path: null
+
+detection:
+  # Startup calibration period: number of initial sampled frames to catalog
+  # existing trades as BASELINE without triggering Telegram notifications
+  baseline_calibration_frames: 10
+  # Minimum bounding box area (in pixels) to consider as a valid trade candidate
+  min_box_area: 400
+  # Intersection-over-Union (IoU) threshold to associate detections with existing trades
+  iou_match_threshold: 0.50
+  # Maximum spatial centroid distance (in pixels) to associate sequential detections
+  max_centroid_distance_px: 50.0
+  # Minimum OCR / model confidence score to accept a detection event (0.0 to 1.0)
+  min_confidence: 0.70
+  # Detector A: Chart region of interest [x1, y1, x2, y2] to exclude news tickers
+  label_roi: [0, 50, 1050, 620]
+  # Detector A: Spatial matching distance threshold for tracking labels
+  label_max_spatial_distance_px: 45.0
+  # Detector A: Max consecutive missing frames before label is pruned from tracker
+  label_max_missing_frames: 10
+  # Detector B: Chart region of interest [x1, y1, x2, y2] for position box detection
+  box_roi: [0, 60, 920, 600]
+  # Detector B: Minimum area in pixels for valid combined trade box
+  box_min_area: 400
+  # Detector B: Minimum width in pixels (filters out single candlesticks)
+  box_min_width: 35
+  # Detector B: Minimum height in pixels (filters out price grid lines)
+  box_min_height: 25
+  # Detector B: Aspect ratio bounds (width / height)
+  box_min_aspect_ratio: 0.25
+  box_max_aspect_ratio: 8.0
+  # Detector B: IoU threshold for spatial position box tracking
+  box_iou_threshold: 0.40
+  # Detector B: Maximum vertical tolerance in pixels for entry line anchor matching
+  box_max_entry_delta_y: 12
+  # Detector B: Number of consecutive frames a box must persist before alert
+  box_confirmation_frames: 1
+  # Detector B: Maximum missing frames before a closed trade box is forgotten
+  box_max_missing_frames: 10
+  # EventManager: Cross-detector correlation time window in seconds
+  correlation_window_sec: 60.0
+  # EventManager: Temporal confirmation frames/observations required for Detector A
+  label_confirmation_count: 1
+  # EventManager: Temporal confirmation frames/observations required for Detector B
+  box_confirmation_count: 1
+  # EventManager: Maximum spatial distance in pixels for cross-detector correlation
+  cross_detector_spatial_threshold_px: 60.0
+  # EventManager: Maximum vertical entry delta in pixels for entry line correlation
+  cross_detector_entry_delta_y: 25
+  # EventManager: Maximum age in seconds before unconfirmed candidate expires
+  candidate_expiry_sec: 30.0
+  # EventManager: Maximum elapsed seconds before an unseen active trade is marked CLOSED
+  active_trade_max_missing_sec: 120.0
+  # EventManager: Recover active and baseline trades from SQLite on application startup
+  recover_on_startup: true
+
+telegram:
+  # Strictly required notification text for trades - DO NOT CHANGE TO INCLUDE DETAILS
+  trade_notification_text: "TRADE IS ACTIVE!"
+  # Whether to attach an annotated chart snapshot with the trade alert
+  attach_snapshot: true
+  # Whether to send administrative/health alerts (stream drop, freeze, restart)
+  enable_health_alerts: true
+  # Directory where activated trade screenshot files are temporarily saved
+  screenshot_dir: "captures/trades"
+  # Telegram HTTP request timeout in seconds
+  request_timeout_sec: 10.0
+  # Outbox retry backoff parameters
+  initial_retry_backoff_sec: 5.0
+  max_retry_backoff_sec: 60.0
+  max_retries: 5
+  # Maximum number of screenshot files retained on disk before oldest are pruned
+  max_stored_screenshots: 100
+
+storage:
+  # SQLite database path for persistent trade state and audit log
+  db_path: "storage/trade_state.db"
+
+logging:
+  # Logging verbosity: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+  # Path to write application rotating log files
+  file_path: "logs/app.log"
+  # Maximum file size before rotating (in bytes, default: 10MB)
+  max_bytes: 10485760
+  # Number of rotated backup log files to retain
+  backup_count: 5

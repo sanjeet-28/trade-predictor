@@ -1,0 +1,2 @@
+"""Visual trade detectors package."""
+

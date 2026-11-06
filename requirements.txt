@@ -1,0 +1,12 @@
+# Phase 1 Foundation Dependencies
+PyYAML>=6.0.1
+python-dotenv>=1.0.1
+pytest>=8.0.0
+
+# Phase 2 Stream Ingestion Dependencies
+yt-dlp>=2024.10.0
+numpy>=1.26.0
+
+# Phase 3 Visual Processing and OCR Dependencies
+opencv-python>=4.10.0
+rapidocr_onnxruntime>=1.4.0

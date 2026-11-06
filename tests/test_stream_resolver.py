@@ -1,0 +1,166 @@
+"""Unit tests for YouTube stream manifest resolver using yt-dlp."""
+
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
+import pytest
+
+from stream.resolver import (
+    StreamOfflineError,
+    StreamResolution,
+    StreamResolver,
+    StreamResolverError,
+    StreamUnavailableError,
+)
+
+
+@pytest.fixture
+def mock_formats() -> list:
+    """Mock HLS formats returned by yt-dlp."""
+    return [
+        {
+            "format_id": "229",
+            "height": 240,
+            "width": 426,
+            "url": "https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/1794019800/itag/229/playlist.m3u8",
+        },
+        {
+            "format_id": "232",
+            "height": 720,
+            "width": 1280,
+            "url": "https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/1794019800/itag/232/playlist.m3u8",
+        },
+        {
+            "format_id": "270",
+            "height": 1080,
+            "width": 1920,
+            "url": "https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/1794019800/itag/270/playlist.m3u8",
+        },
+    ]
+
+
+def test_resolve_optimal_format(mock_formats) -> None:
+    """Verify resolver selects 720p format when preferred_height is 720."""
+    resolver = StreamResolver(
+        primary_url="https://www.youtube.com/watch?v=mock_live",
+        preferred_height=720,
+    )
+
+    mock_info = {
+        "is_live": True,
+        "live_status": "is_live",
+        "was_live": False,
+        "formats": mock_formats,
+    }
+
+    with patch("yt_dlp.YoutubeDL") as mock_ydl_cls:
+        mock_instance = MagicMock()
+        mock_instance.extract_info.return_value = mock_info
+        mock_ydl_cls.return_value.__enter__.return_value = mock_instance
+
+        resolution = resolver.resolve()
+
+        assert isinstance(resolution, StreamResolution)
+        assert resolution.format_id == "232"
+        assert resolution.height == 720
+        assert resolution.width == 1280
+        assert "itag/232" in resolution.stream_url
+        assert resolution.is_live is True
+        assert resolution.expires_at is not None
+
+
+def test_resolve_caching_and_expiration(mock_formats) -> None:
+    """Verify stream URL is cached and refreshed only when expired or forced."""
+    resolver = StreamResolver(
+        primary_url="https://www.youtube.com/watch?v=mock_live",
+        preferred_height=720,
+    )
+
+    mock_info = {
+        "is_live": True,
+        "live_status": "is_live",
+        "formats": mock_formats,
+    }
+
+    with patch("yt_dlp.YoutubeDL") as mock_ydl_cls:
+        mock_instance = MagicMock()
+        mock_instance.extract_info.return_value = mock_info
+        mock_ydl_cls.return_value.__enter__.return_value = mock_instance
+
+        # First call hits extractor
+        res1 = resolver.resolve()
+        assert mock_instance.extract_info.call_count == 1
+
+        # Second call returns cached resolution
+        res2 = resolver.resolve(force_refresh=False)
+        assert res1 is res2
+        assert mock_instance.extract_info.call_count == 1
+
+        # Force refresh makes a new call
+        res3 = resolver.resolve(force_refresh=True)
+        assert mock_instance.extract_info.call_count == 2
+
+
+def test_resolve_offline_stream() -> None:
+    """Verify offline or ended stream raises StreamOfflineError."""
+    resolver = StreamResolver(primary_url="https://www.youtube.com/watch?v=mock_offline")
+
+    mock_info = {
+        "is_live": False,
+        "was_live": True,
+        "live_status": "was_live",
+        "formats": [],
+    }
+
+    with patch("yt_dlp.YoutubeDL") as mock_ydl_cls:
+        mock_instance = MagicMock()
+        mock_instance.extract_info.return_value = mock_info
+        mock_ydl_cls.return_value.__enter__.return_value = mock_instance
+
+        with pytest.raises(StreamOfflineError):
+            resolver.resolve()
+
+
+def test_resolve_unavailable_stream() -> None:
+    """Verify deleted or private video raises StreamUnavailableError."""
+    import yt_dlp.utils
+
+    resolver = StreamResolver(primary_url="https://www.youtube.com/watch?v=invalid_id")
+
+    with patch("yt_dlp.YoutubeDL") as mock_ydl_cls:
+        mock_instance = MagicMock()
+        mock_instance.extract_info.side_effect = yt_dlp.utils.DownloadError("Video unavailable")
+        mock_ydl_cls.return_value.__enter__.return_value = mock_instance
+
+        with pytest.raises(StreamUnavailableError):
+            resolver.resolve()
+
+
+def test_resolve_transient_retry_and_backoff(mock_formats) -> None:
+    """Verify transient extraction errors retry with exponential backoff."""
+    resolver = StreamResolver(
+        primary_url="https://www.youtube.com/watch?v=mock_transient",
+        max_retries=3,
+        initial_backoff_sec=0.01,
+        backoff_multiplier=1.5,
+    )
+
+    mock_info = {
+        "is_live": True,
+        "live_status": "is_live",
+        "formats": mock_formats,
+    }
+
+    with patch("yt_dlp.YoutubeDL") as mock_ydl_cls:
+        mock_instance = MagicMock()
+        # Fail first 2 attempts with network glitch, succeed on 3rd
+        mock_instance.extract_info.side_effect = [
+            RuntimeError("Connection reset"),
+            RuntimeError("Gateway timeout"),
+            mock_info,
+        ]
+        mock_ydl_cls.return_value.__enter__.return_value = mock_instance
+
+        resolution = resolver.resolve()
+        assert resolution.format_id == "232"
+        assert mock_instance.extract_info.call_count == 3
+
