@@ -1,0 +1,16 @@
+# Linux VPS / Headless Server Dependencies
+# Forex Trade Detection & Telegram Notification System
+
+# Configuration, Environment, and Testing
+PyYAML>=6.0.1
+python-dotenv>=1.0.1
+pytest>=8.0.0
+
+# Stream Ingestion & Numeric Processing
+yt-dlp>=2024.10.0
+numpy>=1.26.0
+
+# Headless Computer Vision & OCR (no X11 / libGL GUI dependencies required)
+opencv-python-headless>=4.10.0
+rapidocr_onnxruntime>=1.4.0
+

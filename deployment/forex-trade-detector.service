@@ -1,0 +1,41 @@
+[Unit]
+Description=Forex Trade Detection & Telegram Notification System
+After=network.target network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=forex
+Group=forex
+WorkingDirectory=/opt/forex-detector
+EnvironmentFile=/opt/forex-detector/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/opt/forex-detector/.venv/bin:/usr/local/bin:/usr/bin:/bin
+
+# Main process execution
+ExecStart=/opt/forex-detector/.venv/bin/python main.py --config config/config.prod.yaml
+
+# Clean shutdown handling: send SIGTERM and wait up to 30s before SIGKILL
+KillSignal=SIGTERM
+TimeoutStopSec=30
+KillMode=mixed
+
+# Automatic restart policy on unexpected exit
+Restart=always
+RestartSec=10s
+
+# Resource boundaries
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryHigh=1500M
+MemoryMax=2048M
+
+# Hardening / Sandboxing
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+
