@@ -92,6 +92,18 @@ def make_frame(img: np.ndarray, frame_id: int = 1, dt: Optional[datetime] = None
     )
 
 
+def make_test_config(db_file: str, baseline_frames: int = 1) -> AppConfig:
+    """Helper to construct test AppConfig with test credentials."""
+    config = AppConfig()
+    config.storage.db_path = db_file
+    config.detection.baseline_calibration_frames = baseline_frames
+    config.detection.label_confirmation_count = 1
+    config.detection.box_confirmation_count = 1
+    config.telegram.bot_token = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+    config.telegram.chat_id = "123456789"
+    return config
+
+
 class MockStreamPipeline:
     """Simulated frame stream providing controlled sequences of synthetic frames."""
 
@@ -120,10 +132,7 @@ def test_scenario_01_detector_a_alone_detects_trade(tmp_path: Path):
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
-    config.detection.baseline_calibration_frames = 1
-    config.detection.label_confirmation_count = 1
+    config = make_test_config(db_file, baseline_frames=1)
 
     # Create frames: frame 0 empty (baseline), frame 1 with BUY label
     f0_img = make_chart_canvas()
@@ -166,10 +175,7 @@ def test_scenario_02_detector_b_alone_detects_trade(tmp_path: Path):
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
-    config.detection.baseline_calibration_frames = 1
-    config.detection.box_confirmation_count = 1
+    config = make_test_config(db_file, baseline_frames=1)
 
     f0_img = make_chart_canvas()
     f1_img = draw_synthetic_buy_box(make_chart_canvas(), x=450, entry_y=320)
@@ -211,9 +217,7 @@ def test_scenario_03_both_detectors_detect_same_trade(tmp_path: Path):
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
-    config.detection.baseline_calibration_frames = 1
+    config = make_test_config(db_file, baseline_frames=1)
 
     f0_img = make_chart_canvas()
     # Draw both BUY label and matching BUY position box
@@ -250,9 +254,7 @@ def test_scenario_04_two_separate_trades_appear_close_together(tmp_path: Path):
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
-    config.detection.baseline_calibration_frames = 1
+    config = make_test_config(db_file, baseline_frames=1)
 
     f0 = make_chart_canvas()
     # Frame 1: Trade 1 at x=200, entry_y=300; Trade 2 at x=600, entry_y=450
@@ -288,9 +290,7 @@ def test_scenario_05_trade_appears_while_other_detector_unavailable(tmp_path: Pa
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
-    config.detection.baseline_calibration_frames = 1
+    config = make_test_config(db_file, baseline_frames=1)
 
     f0 = make_chart_canvas()
     f1 = draw_synthetic_buy_box(make_chart_canvas(), x=350, entry_y=300)
@@ -325,9 +325,7 @@ def test_scenario_06_existing_trades_present_at_startup(tmp_path: Path):
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
-    config.detection.baseline_calibration_frames = 2
+    config = make_test_config(db_file, baseline_frames=2)
 
     # Trade already visible in baseline frames 0 and 1
     f_trade = draw_synthetic_buy_box(make_chart_canvas(), x=400, entry_y=350)
@@ -363,9 +361,7 @@ def test_scenario_07_and_08_stream_disconnects_and_reconnects_with_same_trade(tm
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
-    config.detection.baseline_calibration_frames = 1
+    config = make_test_config(db_file, baseline_frames=1)
 
     f0 = make_chart_canvas()
     f_trade = draw_synthetic_buy_box(make_chart_canvas(), x=400, entry_y=350)
@@ -430,9 +426,7 @@ def test_scenario_09_application_restart_with_active_trades(tmp_path: Path):
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
-    config.detection.baseline_calibration_frames = 1
+    config = make_test_config(db_file, baseline_frames=1)
 
     f0 = make_chart_canvas()
     f_trade = draw_synthetic_buy_box(make_chart_canvas(), x=400, entry_y=350)
@@ -482,8 +476,7 @@ def test_scenario_10_application_restart_with_pending_notifications(tmp_path: Pa
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
+    config = make_test_config(db_file)
     trade_repo = TradeRepository(db_file)
     notif_repo = NotificationRepository(db_file)
 
@@ -544,9 +537,7 @@ def test_scenario_11_telegram_unavailable_retained_in_outbox(tmp_path: Path):
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
-    config.detection.baseline_calibration_frames = 1
+    config = make_test_config(db_file, baseline_frames=1)
 
     f0 = make_chart_canvas()
     f1 = draw_synthetic_buy_box(make_chart_canvas(), x=400, entry_y=350)
@@ -590,9 +581,7 @@ def test_scenario_12_screenshot_capture_fails_fallback_to_text(tmp_path: Path):
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
-    config.detection.baseline_calibration_frames = 1
+    config = make_test_config(db_file, baseline_frames=1)
 
     f0 = make_chart_canvas()
     f1 = draw_synthetic_buy_box(make_chart_canvas(), x=400, entry_y=350)
@@ -633,9 +622,7 @@ def test_scenario_13_database_temporarily_unavailable_queue_retry(tmp_path: Path
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
-    config.detection.baseline_calibration_frames = 1
+    config = make_test_config(db_file, baseline_frames=1)
 
     trade_repo = TradeRepository(db_file)
     event_repo = EventRepository(db_file)
@@ -688,9 +675,7 @@ def test_scenario_14_delayed_notification_delivery_no_duplicates(tmp_path: Path)
     db_file = str(tmp_path / "trade_state.db")
     init_db(db_file)
 
-    config = AppConfig()
-    config.storage.db_path = db_file
-    config.detection.baseline_calibration_frames = 1
+    config = make_test_config(db_file, baseline_frames=1)
 
     f0 = make_chart_canvas()
     f_trade = draw_synthetic_buy_box(make_chart_canvas(), x=400, entry_y=350)
@@ -778,8 +763,7 @@ def test_scenario_15_forced_process_termination_recovery(tmp_path: Path):
 
     # 3. Deliver on restart
     http_mock = MagicMock(return_value=b'{"ok": true, "result": {"message_id": 115}}')
-    config = AppConfig()
-    config.storage.db_path = db_file
+    config = make_test_config(db_file)
     telegram_notifier = TelegramNotifier(
         config=config,
         notification_repo=notif_repo,

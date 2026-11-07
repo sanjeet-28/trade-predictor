@@ -15,6 +15,9 @@ from datetime import datetime, timezone
 from core.config import load_config
 from notifications.telegram_notifier import mask_token, sanitize_url
 
+# Instruct pytest to ignore this manual utility script during test collection
+__test__ = False
+
 
 def test_telegram_connection() -> bool:
     """Test Telegram Bot credentials and send a test message."""

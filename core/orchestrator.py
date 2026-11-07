@@ -201,6 +201,10 @@ class TradeDetectionOrchestrator:
         """
         self.stats.frames_processed += 1
 
+        # 0. Advance Central Event Manager state, calibration counter, and retry queue
+        if self.event_manager:
+            self.event_manager.advance_frame(frame)
+
         # 1. Detector A: BUY / SELL Label Recognition
         events_a = []
         if self.label_detector:
