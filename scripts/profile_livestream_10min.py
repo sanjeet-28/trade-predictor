@@ -116,6 +116,9 @@ def run_10min_profile(duration_sec: float = 600.0) -> Dict[str, Any]:
     frames_processed = 0
     start_time = time.time()
     next_log_time = start_time + 60.0  # Log update every 60 seconds
+    final_frames_received = 0
+    final_frames_delivered = 0
+    final_frames_dropped = 0
 
     orchestrator.startup()
     print("Connected to stream. Monitoring 10-minute runtime stability...")
@@ -160,6 +163,12 @@ def run_10min_profile(duration_sec: float = 600.0) -> Dict[str, Any]:
 
             if (now - start_time) >= duration_sec:
                 print(f"\n[OK] Reached target duration of {duration_sec:.0f} seconds.")
+                # Capture active reader stats prior to generator cleanup
+                reader = pipeline._active_reader
+                if reader:
+                    final_frames_received = reader.frames_received
+                    final_frames_delivered = reader.frames_delivered
+                    final_frames_dropped = reader.frames_dropped
                 break
 
     except KeyboardInterrupt:
@@ -170,9 +179,9 @@ def run_10min_profile(duration_sec: float = 600.0) -> Dict[str, Any]:
     finally:
         total_duration = time.time() - start_time
         reader = pipeline._active_reader
-        frames_received = reader.frames_received if reader else frames_processed
-        frames_delivered = reader.frames_delivered if reader else frames_processed
-        frames_dropped = reader.frames_dropped if reader else 0
+        frames_received = final_frames_received or (reader.frames_received if reader else frames_processed)
+        frames_delivered = final_frames_delivered or (reader.frames_delivered if reader else frames_processed)
+        frames_dropped = final_frames_dropped if final_frames_dropped > 0 else (reader.frames_dropped if reader else 0)
         pipeline.stop()
         orchestrator.stop()
 
@@ -207,7 +216,7 @@ def run_10min_profile(duration_sec: float = 600.0) -> Dict[str, Any]:
     print(f"Arrival Intervals:  avg={arrival_stats['avg']}s, median={arrival_stats['median']}s, p95={arrival_stats['p95']}s")
     print(f"Cycle Wall Latency: avg={wall_stats['avg']}ms, median={wall_stats['median']}ms, p95={wall_stats['p95']}ms, max={wall_stats['max']}ms")
     print(f"Cycle CPU Time:     avg={cpu_stats['avg']}ms, median={cpu_stats['median']}ms, p95={cpu_stats['p95']}ms, max={cpu_stats['max']}ms")
-    print(f"Memory RSS:         start={mem_start_curr/1024/1024:.2f}MB, peak={mem_peak/1024/1024:.2f}MB, delta={(mem_end_curr - mem_start_curr)/1024/1024:.2f}MB")
+    print(f"Python Heap Mem:    start={mem_start_curr/1024/1024:.2f}MB, peak={mem_peak/1024/1024:.2f}MB, delta={(mem_end_curr - mem_start_curr)/1024/1024:.2f}MB")
     print("=" * 80)
 
     results = {
@@ -217,13 +226,14 @@ def run_10min_profile(duration_sec: float = 600.0) -> Dict[str, Any]:
         "frames": {
             "received": frames_received,
             "processed": frames_processed,
-            "dropped": frames_dropped,
+            "dropped_backlog_skips": frames_dropped,
             "drop_rate_pct": round((frames_dropped / max(1, frames_received)) * 100, 2),
         },
         "frame_arrival_intervals_sec": arrival_stats,
         "cycle_wall_latency_ms": wall_stats,
         "cycle_cpu_time_ms": cpu_stats,
-        "memory_mb": {
+        "python_heap_memory_mb": {
+            "measurement_type": "tracemalloc_python_heap",
             "start": round(mem_start_curr / 1024 / 1024, 2),
             "peak": round(mem_peak / 1024 / 1024, 2),
             "end": round(mem_end_curr / 1024 / 1024, 2),

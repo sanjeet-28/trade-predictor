@@ -1166,3 +1166,74 @@ FOREX TRADE DETECTION & TELEGRAM NOTIFICATION SYSTEM - PROGRESS TRACKER
 13. NEXT RECOMMENDED TASK:
     Present Phase 8A Local Windows Validation Final Report and await user review.
 ================================================================================
+
+[SESSION 8 (PART D) - 2026-11-07: PHASE 8A FINAL BENCHMARK AUDIT]
+
+1. CURRENT DATE AND TIME:
+   2026-11-07 06:35:00 IST (UTC+5:30)
+
+2. PHASE AND TASK COMPLETED:
+   Phase 8A: Final Benchmark Audit
+   - Frame Accounting Investigation:
+     * Audited `stream/ffmpeg_client.py` and `scripts/profile_livestream_10min.py`.
+     * Established exact frame accounting formula: Total Frames Emitted by FFmpeg (599) = Frames Delivered & Processed by Consumer (538) + Stale Frames Overwritten in Latest-Frame Buffer (61).
+     * Confirmed 0 frames were processed more than once (`read_frame()` atomically pops and clears buffer under lock).
+     * Identified reporting defect: `pipeline._active_reader` was read after generator exit had nulled it to `None`, causing `dropped` to report 0 in the summary JSON. Fixed by capturing stats before generator exit.
+   - Forensic Visual & OCR Audit of Four Detections:
+     * Cropped and ran OCR on bounding box contexts from saved screenshots in `captures/profile_10min/`.
+     * Detections 1 & 3 (at `[990, 402]`): Confirmed as static "Current Position: Sell" indicator widget on the right panel. Detection 3 was a re-activation of Detection 1 after 120s inactivity timeout. Neither was a new trade signal.
+     * Detections 2 & 4 (at `[572, 345]` and `[540, 346]`): Confirmed as an existing historical trade badge (`Sell` next to `TP1`) on a past candlestick. Detection 4 was the exact same badge as Detection 2, shifted left by 32px over 8.5 minutes due to chart scrolling. Neither was a new trade activation.
+     * Verified EventManager correctly created exactly 1 simulated outbox notification per activation.
+   - Performance Latency Breakdown:
+     * Evaluated why p95 latency reached 1,219ms and max reached 1,596ms (dense candlestick regions with 18-20 candidate text boxes requiring sequential CRNN passes).
+     * Confirmed 61 skipped frames do not drop genuine signals because live chart signals persist for minutes to hours, while intermediate drops skip at most 1 second.
+     * Confirmed average 828ms cycle provides 17.2% headroom for practical monitoring without claiming guaranteed 1 FPS or zero missed signals.
+   - Memory Measurement Verification:
+     * Audited `tracemalloc` usage: confirmed start value of 0.0 MB reflects Python heap allocations since `tracemalloc.start()`, not OS process RSS.
+     * Relabeled memory reporting to `python_heap_memory_mb` to prevent confusion with process RSS.
+   - Code Corrections & Git Push:
+     * Updated `scripts/profile_livestream_10min.py` and `captures/benchmarks/livestream_10min_profile.json`.
+     * Committed changes to `origin/main` without force-pushing.
+
+3. FILES CREATED:
+   None.
+
+4. FILES MODIFIED:
+   - scripts/profile_livestream_10min.py (fixed reader stats capture and memory labeling)
+   - captures/benchmarks/livestream_10min_profile.json (updated audited frame and heap numbers)
+   - progress.txt (appended Session 8 Part D log)
+
+5. FILES DELETED:
+   None.
+
+6. DEPENDENCIES INSTALLED, UPGRADED OR REMOVED:
+   None.
+
+7. COMMANDS EXECUTED:
+   - python audit scripts querying profile_10min.db and cropping screenshot contexts
+   - .\.venv\Scripts\python -m pytest tests/test_short_lived_signals.py tests/test_ffmpeg_client.py -v (7/7 passed)
+   - git status / git add / git commit / git push
+
+8. TESTS PERFORMED AND THEIR RESULTS:
+   - Focused unit tests: 7/7 passed in 0.90s.
+   - Complete forensic audit of 4 detections: 100% accounted for with pixel coordinates and OCR text.
+
+9. ERRORS ENCOUNTERED AND THEIR RESOLUTIONS:
+   - Defect: Summary JSON reported `dropped: 0` because generator cleanup set `_active_reader = None` before summary extraction.
+     Resolution: Saved reader stats into local variables before `break` in `scripts/profile_livestream_10min.py`.
+   - Misnomer: Label "Memory RSS" was used for Python heap allocations from `tracemalloc`.
+     Resolution: Clarified label and JSON key to `python_heap_memory_mb`.
+
+10. CURRENT IMPLEMENTATION STATUS:
+    Phase 8A Final Benchmark Audit is 100% COMPLETE.
+    All frame counters, detections, latency distributions, and memory allocations are forensically audited and verified.
+
+11. REMAINING TASKS:
+    - Phase 8B / Remote VPS Deployment or Local Production Monitoring (pending explicit user instruction).
+
+12. MANUAL ACTIONS PENDING FROM THE USER:
+    - Review Phase 8A Final Benchmark Audit report.
+
+13. NEXT RECOMMENDED TASK:
+    Stop after audit and await explicit user instruction.
+================================================================================
