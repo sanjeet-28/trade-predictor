@@ -1367,14 +1367,21 @@ FOREX TRADE DETECTION & TELEGRAM NOTIFICATION SYSTEM - PROGRESS TRACKER
 
 7. COMMANDS EXECUTED:
    - Python PyPI JSON API inspection script verifying aarch64 binary wheels for all 10 dependencies
+   - pip install --dry-run --platform manylinux_2_28_aarch64 --only-binary=:all: -r requirements-linux.txt (100% ARM64 wheel resolution verified)
    - Python script verifying SQLite online backup, restore, and schema integrity
+   - Python test script verifying DRY_RUN=true strictly prevents all external HTTP requests
+   - wsl bash -n scripts/*.sh (validated bash syntax of bootstrap_vps.sh, start.sh, status.sh, stop.sh)
+   - systemd-analyze verify deployment/forex-trade-detector.service (validated systemd unit syntax)
    - .\.venv\Scripts\pytest -q (147/147 passed)
    - git status / git add / git commit / git push
 
 8. TESTS PERFORMED AND THEIR RESULTS:
    - Full automated test suite: 147 passed in 45.84s (100% pass rate).
    - PyPI wheel audit: 100% verified native pre-compiled `aarch64` wheels for all dependencies.
-   - SQLite backup & restore test: Atomic backup completed in 9.28ms, restored and verified schema integrity OK.
+   - Pip ARM64 Dry-Run Resolution: Successfully resolved and downloaded wheel metadata for all packages on Linux aarch64.
+   - SQLite backup & restore test: Atomic backup completed in 9.33ms, restored and verified schema integrity OK.
+   - Network Prevention Test: Enqueued active trade in outbox and confirmed 0 external HTTP requests under DRY_RUN=true.
+   - Linux Shell Syntax: 100% valid bash syntax on all scripts.
 
 9. ERRORS ENCOUNTERED AND THEIR RESOLUTIONS:
    - Error: Windows tempfile cleanup threw `PermissionError` when deleting SQLite database file before connection closure.
