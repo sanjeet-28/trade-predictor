@@ -41,7 +41,9 @@ detection:
   # Minimum OCR / model confidence score to accept a detection event (0.0 to 1.0)
   min_confidence: 0.70
   # Detector A: Chart region of interest [x1, y1, x2, y2] to exclude news tickers
-  label_roi: [0, 50, 1050, 620]
+  # Optimized LabelDetector ROI: [x1, y1, x2, y2]
+  # Covers chart area and Position indicator widget while excluding static price scales & timeline numbers
+  label_roi: [0, 50, 1025, 450]
   # Detector A: Spatial matching distance threshold for tracking labels
   label_max_spatial_distance_px: 45.0
   # Detector A: Max consecutive missing frames before label is pruned from tracker

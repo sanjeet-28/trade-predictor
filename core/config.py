@@ -48,7 +48,7 @@ class DetectionConfig:
     iou_match_threshold: float = 0.50
     max_centroid_distance_px: float = 50.0
     min_confidence: float = 0.70
-    label_roi: Optional[Tuple[int, int, int, int]] = (0, 50, 1050, 620)
+    label_roi: Optional[Tuple[int, int, int, int]] = (0, 50, 1025, 450)
     label_max_spatial_distance_px: float = 45.0
     label_max_missing_frames: int = 10
     # Detector B (Trade-Position Box) settings

@@ -57,7 +57,7 @@ class LabelDetector:
 
     def __init__(
         self,
-        roi: Optional[Tuple[int, int, int, int]] = (0, 50, 1050, 620),  # (x1, y1, x2, y2)
+        roi: Optional[Tuple[int, int, int, int]] = (0, 50, 1025, 450),  # (x1, y1, x2, y2)
         min_confidence: float = 0.70,
         max_spatial_distance_px: float = 45.0,
         baseline_frames: int = 10,
@@ -76,8 +76,9 @@ class LabelDetector:
         if ocr_engine is not None:
             self._ocr = ocr_engine
         elif RapidOCR is not None:
-            self._ocr = RapidOCR()
-            logger.info("RapidOCR ONNX engine initialized for LabelDetector.")
+            # use_cls=False: chart labels are strictly horizontal; skips angle classification for ~140ms saving
+            self._ocr = RapidOCR(use_cls=False)
+            logger.info("RapidOCR ONNX engine initialized for LabelDetector (use_cls=False).")
         else:
             self._ocr = None
             logger.warning("No OCR engine available. LabelDetector will require an injected OCR mock.")

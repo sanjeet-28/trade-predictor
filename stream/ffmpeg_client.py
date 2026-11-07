@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator, Optional
@@ -93,6 +94,15 @@ class FFmpegFrameReader:
         self._frame_sequence: int = 0
         self._is_running: bool = False
 
+        # Real-time decoupled reader synchronization
+        self._reader_thread: Optional[threading.Thread] = None
+        self._frame_lock = threading.Lock()
+        self._new_frame_event = threading.Event()
+        self._latest_frame: Optional[Frame] = None
+        self.frames_received: int = 0
+        self.frames_delivered: int = 0
+        self.frames_dropped: int = 0
+
     @property
     def is_running(self) -> bool:
         """Return True if the FFmpeg subprocess is active and running."""
@@ -148,12 +158,80 @@ class FFmpegFrameReader:
             )
             self._is_running = True
             self._frame_sequence = 0
+
+            # Spawn real-time pipe reader worker for live network streams
+            if not is_file:
+                self._reader_thread = threading.Thread(
+                    target=self._pipe_reader_worker,
+                    name="FFmpegPipeReader",
+                    daemon=True,
+                )
+                self._reader_thread.start()
         except Exception as e:
             self._is_running = False
             logger.error("Failed to launch FFmpeg process: %s", e)
             raise FFmpegProcessError(f"Could not spawn FFmpeg process: {e}") from e
 
+    def _pipe_reader_worker(self) -> None:
+        """Background thread continuously draining FFmpeg stdout pipe.
+
+        Maintains real-time sync by storing only the freshest live frame.
+        If the downstream consumer is busy, stale frames are discarded and counted
+        rather than accumulating a cumulative processing backlog.
+        """
+        logger.debug("FFmpeg background pipe reader thread started.")
+        while self._is_running:
+            try:
+                frame = self._read_raw_frame()
+                if frame is None:
+                    # Pipe closed or EOF reached
+                    self._new_frame_event.set()
+                    break
+
+                with self._frame_lock:
+                    if self._latest_frame is not None:
+                        self.frames_dropped += 1
+                        logger.warning(
+                            "Pipeline backlog detected: skipped stale frame (cumulative dropped: %d) to maintain zero live lag",
+                            self.frames_dropped,
+                        )
+                    self._latest_frame = frame
+                    self.frames_received += 1
+                    self._new_frame_event.set()
+            except Exception as e:
+                logger.debug("FFmpeg pipe reader worker error: %s", e)
+                self._new_frame_event.set()
+                break
+        logger.debug("FFmpeg background pipe reader thread stopped.")
+
     def read_frame(self) -> Optional[Frame]:
+        """Retrieve a video frame.
+
+        For live network streams (is_local_file=False), returns the freshest live frame
+        from the decoupled reader thread, preventing latency accumulation.
+        For local video files (is_local_file=True), reads frames sequentially without skipping.
+        """
+        if not self._is_running or self._process is None:
+            return None
+
+        # Local files: process every frame sequentially without dropping
+        if self.is_local_file:
+            return self._read_raw_frame()
+
+        # Live network streams: wait for the newest live frame
+        if not self._new_frame_event.wait(timeout=10.0):
+            logger.warning("Frame read timeout waiting for new live frame.")
+            return None
+
+        with self._frame_lock:
+            frame = self._latest_frame
+            self._latest_frame = None
+            self._new_frame_event.clear()
+            if frame is not None:
+                self.frames_delivered += 1
+            return frame
+
+    def _read_raw_frame(self) -> Optional[Frame]:
         """Read a single raw frame from the FFmpeg stdout pipe into a NumPy array."""
         if not self._is_running or self._process is None or self._process.stdout is None:
             return None
@@ -221,6 +299,14 @@ class FFmpegFrameReader:
     def stop(self) -> None:
         """Gracefully shut down the FFmpeg process and close pipes."""
         self._is_running = False
+        self._new_frame_event.set()
+        if self._reader_thread and self._reader_thread.is_alive():
+            try:
+                self._reader_thread.join(timeout=2.0)
+            except Exception:
+                pass
+            self._reader_thread = None
+
         if self._process is not None:
             logger.info("Stopping FFmpeg process (PID=%s)", self._process.pid)
             try:

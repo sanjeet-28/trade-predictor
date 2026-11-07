@@ -1,7 +1,10 @@
 """Unit tests for FFmpeg subprocess frame reader."""
 
-import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
+import subprocess
+from unittest.mock import MagicMock
+import numpy as np
 import pytest
 
 from core.models import Frame
@@ -104,4 +107,52 @@ def test_ffmpeg_frame_reader_invalid_source(tmp_path: Path) -> None:
     with pytest.raises(FFmpegProcessError):
         reader.start()
         reader.read_frame()
+
+
+def test_ffmpeg_frame_reader_decoupled_queue_drop_tracking() -> None:
+    """Verify decoupled live stream reader discards stale frames when consumer is busy."""
+    reader = FFmpegFrameReader(
+        source="http://mock.live.stream/test.m3u8",
+        width=320,
+        height=240,
+        is_local_file=False,
+    )
+
+    frame1 = Frame(1, datetime.now(timezone.utc), 320, 240, np.zeros((240, 320, 3), dtype=np.uint8))
+    frame2 = Frame(2, datetime.now(timezone.utc), 320, 240, np.ones((240, 320, 3), dtype=np.uint8))
+    frame3 = Frame(3, datetime.now(timezone.utc), 320, 240, np.full((240, 320, 3), 2, dtype=np.uint8))
+
+    reader._is_running = True
+    reader._process = MagicMock()
+
+    # Simulate reader worker buffering frames without consumer reading
+    with reader._frame_lock:
+        reader._latest_frame = frame1
+        reader.frames_received += 1
+        reader._new_frame_event.set()
+
+    # Second frame arrives before first was read -> drop count increments
+    with reader._frame_lock:
+        if reader._latest_frame is not None:
+            reader.frames_dropped += 1
+        reader._latest_frame = frame2
+        reader.frames_received += 1
+        reader._new_frame_event.set()
+
+    # Third frame arrives -> drop count increments again
+    with reader._frame_lock:
+        if reader._latest_frame is not None:
+            reader.frames_dropped += 1
+        reader._latest_frame = frame3
+        reader.frames_received += 1
+        reader._new_frame_event.set()
+
+    assert reader.frames_dropped == 2
+    assert reader.frames_received == 3
+
+    # Consumer reads -> should receive the freshest frame (frame3)
+    delivered = reader.read_frame()
+    assert delivered is not None
+    assert delivered.frame_id == 3
+    assert reader.frames_delivered == 1
 
