@@ -84,6 +84,31 @@ def backup_database(
     return dest
 
 
+def sync_backup_to_drive(local_backup_path: str, drive_backup_dir: str) -> str:
+    """Copy completed local backup to persistent Google Drive and verify integrity."""
+    if not os.path.exists(local_backup_path):
+        raise FileNotFoundError(f"Local backup not found: {local_backup_path}")
+
+    os.makedirs(drive_backup_dir, exist_ok=True)
+    filename = os.path.basename(local_backup_path)
+    drive_dest = os.path.join(drive_backup_dir, filename)
+
+    logger.info("Syncing local backup to Google Drive: %s -> %s", local_backup_path, drive_dest)
+    shutil.copy2(local_backup_path, drive_dest)
+
+    # Verify copied file integrity on Google Drive
+    conn = sqlite3.connect(drive_dest)
+    try:
+        res = conn.execute("PRAGMA integrity_check;").fetchone()
+        if not res or res[0] != "ok":
+            raise RuntimeError(f"Drive backup integrity check failed on {drive_dest}: {res}")
+        logger.info("Verified Google Drive backup schema integrity: %s (OK)", drive_dest)
+    finally:
+        conn.close()
+
+    return drive_dest
+
+
 def restore_database(backup_file: str, target_db: Optional[str] = None) -> None:
     """Restore database from a point-in-time backup file."""
     cfg = load_config()
@@ -129,6 +154,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="SQLite Online Backup & Restore Utility")
     parser.add_argument("--source", type=str, default=None, help="Source database path")
     parser.add_argument("--dest-dir", type=str, default="backups", help="Backup output directory")
+    parser.add_argument("--drive-sync-dir", type=str, default=None, help="Target Google Drive directory to sync and verify backup")
     parser.add_argument("--restore", type=str, default=None, help="Restore from specified backup file")
     args = parser.parse_args()
 
@@ -141,6 +167,9 @@ def main() -> int:
         else:
             dest = backup_database(source_db=args.source, backup_dir=args.dest_dir)
             print(f"[SUCCESS] Backup created at: {dest}")
+            if args.drive_sync_dir:
+                drive_copy = sync_backup_to_drive(dest, args.drive_sync_dir)
+                print(f"[SUCCESS] Synced and verified backup on Google Drive at: {drive_copy}")
         return 0
     except Exception as e:
         print(f"[ERROR] Operation failed: {e}", file=sys.stderr)

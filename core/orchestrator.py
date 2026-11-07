@@ -65,11 +65,13 @@ class TradeDetectionOrchestrator:
         dry_run: bool = False,
         simulate_mode: bool = False,
         max_frames: Optional[int] = None,
+        max_duration_sec: Optional[float] = None,
     ) -> None:
         self.config = config or load_config()
         self.dry_run = dry_run
         self.simulate_mode = simulate_mode
         self.max_frames = max_frames
+        self.max_duration_sec = max_duration_sec
         self.local_video_path = local_video_path
 
         # 1. Database & Repositories
@@ -188,6 +190,7 @@ class TradeDetectionOrchestrator:
             self.stop()
             return self.stats
 
+        t_start = time.time()
         self._is_running = True
         logger.info("Orchestrator processing loop started.")
 
@@ -200,6 +203,10 @@ class TradeDetectionOrchestrator:
 
                 if self.max_frames is not None and self.stats.frames_processed >= self.max_frames:
                     logger.info("Reached maximum target frames (%d). Exiting loop.", self.max_frames)
+                    break
+
+                if self.max_duration_sec is not None and (time.time() - t_start) >= self.max_duration_sec:
+                    logger.info("Reached maximum target duration (%.1fs). Exiting loop.", self.max_duration_sec)
                     break
 
         except KeyboardInterrupt:

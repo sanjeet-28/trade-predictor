@@ -1403,3 +1403,86 @@ FOREX TRADE DETECTION & TELEGRAM NOTIFICATION SYSTEM - PROGRESS TRACKER
 13. NEXT RECOMMENDED TASK:
     Await user approval and instance provisioning.
 ================================================================================
+
+[SESSION 9 - 2026-11-07: PHASE 9 GOOGLE COLAB FREE INTEGRATION]
+
+1. CURRENT DATE AND TIME:
+   2026-11-07 08:05:00 IST (UTC+5:30)
+
+2. PHASE AND TASK COMPLETED:
+   Phase 9: Google Colab Free Integration
+   - Targeted Deployment: Abandoned paid cloud VPS hosting and transitioned to Google Colab Free (standard CPU runtime, 0 GPU required, 0 paid APIs) for on-demand 1–3 hour Forex livestream monitoring sessions.
+   - Colab Notebook: Created `notebooks/Forex_Trade_Detector.ipynb` conforming to `nbformat` v4 with 12 structured cells:
+       Cell 1: Environment & System Dependency Installation (apt-get ffmpeg, pip install requirements-linux.txt).
+       Cell 2: Repository Clone & Working Directory Setup.
+       Cell 3: Google Drive Mount for persistent SQLite backup sync.
+       Cell 4: Database Snapshot Restoration (restores latest backup from Drive if present, else initializes fresh schema).
+       Cell 5: Safety Mode & Session Duration Configuration (DRY_RUN=True, DURATION_MINUTES=60, ENABLE_LIVE_NOTIFICATIONS=False).
+       Cell 6: Telegram Credential Loading via Google Colab Secrets (zero prompts or credential retrieval when DRY_RUN=True).
+       Cell 7: Configuration Verification & Telegram Connectivity Test.
+       Cell 8: Livestream Monitoring Execution (runs orchestrator with wall-clock duration limit and safe signal handling).
+       Cell 9: Database Backup & Drive Sync (local atomic SQLite backup synced to Google Drive and integrity verified via PRAGMA integrity_check).
+       Cell 10: Trade Detection Forensic Visualizer (inspects and displays detected trade bounding boxes and screenshots).
+       Cell 11: Trade & Notification Audit Log (renders SQLite trades and notification outbox tables).
+       Cell 12: Google Drive Unmount & Clean Session Teardown.
+   - Local-to-Drive SQLite Backup Architecture: In `scripts/backup_db.py`, implemented `sync_backup_to_drive()`. Active database operates in WAL mode strictly on Colab local SSD storage (`/content/trade_detector/storage/trade_state.db`) avoiding Drive FUSE locking bugs; point-in-time snapshots are atomically backed up locally and then copied to `/content/drive/MyDrive/ForexTradeDetector/backups/` and verified with `PRAGMA integrity_check`. Added `--drive-sync-dir` CLI option.
+   - Session Duration Controls: In `core/orchestrator.py`, added `max_duration_sec` and wall-clock check to `TradeDetectionOrchestrator.run()`. In `main.py`, added `--duration-minutes` CLI argument and `DURATION_MINUTES` environment variable support.
+   - Strict Safety Enforcement: DRY_RUN=True by default; no Colab Secrets requested unless ENABLE_LIVE_NOTIFICATIONS=True; strict alert message format ("TRADE IS ACTIVE!") maintained.
+   - Architecture Preservation: Zero modifications to dual detectors (A & B), EventManager, outbox pattern, or FFmpeg reconnection logic.
+   - Documentation & Repository Integration: Authored `docs/COLAB_GUIDE.md` and added "Open in Colab" badge and guide reference to `README.md`.
+
+3. FILES CREATED:
+   - notebooks/Forex_Trade_Detector.ipynb
+   - docs/COLAB_GUIDE.md
+   - scripts/generate_notebook.py
+   - tests/test_colab_integration.py
+
+4. FILES MODIFIED:
+   - core/orchestrator.py (added max_duration_sec and wall-clock loop termination)
+   - main.py (added --duration-minutes and DURATION_MINUTES support)
+   - scripts/backup_db.py (added sync_backup_to_drive and --drive-sync-dir)
+   - README.md (added Colab badge and documentation link)
+   - progress.txt (appended Session 9 log)
+
+5. FILES DELETED:
+   None.
+
+6. DEPENDENCIES INSTALLED, UPGRADED OR REMOVED:
+   None.
+
+7. COMMANDS EXECUTED:
+   - python scripts/generate_notebook.py
+   - .\.venv\Scripts\pytest tests/test_colab_integration.py -v (6/6 passed)
+   - .\.venv\Scripts\pytest -q (153/153 passed)
+   - git status / git diff / git add / git commit / git push
+
+8. TESTS PERFORMED AND THEIR RESULTS:
+   - `test_notebook_json_and_syntax_validity`: Validated JSON parsing and AST compilation of all 12 notebook code cells (PASSED).
+   - `test_requirements_linux_dependencies`: Verified presence of all required headless packages in `requirements-linux.txt` (PASSED).
+   - `test_local_to_drive_backup_and_integrity_verification`: Verified atomic local backup creation, Google Drive directory sync, and PRAGMA integrity check (PASSED).
+   - `test_dry_run_zero_telegram_requests_without_credentials`: Verified DRY_RUN=true dispatches outbox notifications with zero external HTTP requests when bot token and chat ID are empty (PASSED).
+   - `test_duration_based_shutdown_clean_exit`: Verified orchestrator shuts down cleanly when wall-clock duration limit is reached (PASSED).
+   - `test_ffmpeg_clean_stop_on_orchestrator_stop`: Verified FFmpeg reader process terminates without leaking zombie processes (PASSED).
+   - Full regression suite across entire repository: 153 passed in 80.78s (100% pass rate).
+
+9. ERRORS ENCOUNTERED AND THEIR RESOLUTIONS:
+   - Error: Windows SQLite file lock during tempfile cleanup (`PermissionError: [WinError 32]`) when `with sqlite3.connect(...) as conn:` did not close connection.
+     Resolution: Replaced with `with get_db_connection(...) as conn:` which guarantees `conn.close()` in its `finally` block.
+   - Error: SyntaxError from unterminated string literal when generating notebook via inline PowerShell one-liner.
+     Resolution: Authored `scripts/generate_notebook.py` using standard Python dictionary structure and `json.dump()`.
+
+10. CURRENT IMPLEMENTATION STATUS:
+    Phase 9 Google Colab Free Integration is 100% COMPLETE, VALIDATED, and TESTED.
+
+11. REMAINING TASKS:
+    - First monitoring session in Google Colab Free in safe DRY_RUN mode.
+    - User verification of livestream ingestion and detection in Colab environment.
+
+12. MANUAL ACTIONS PENDING FROM THE USER:
+    - Open `notebooks/Forex_Trade_Detector.ipynb` via the "Open in Colab" badge in README.md.
+    - Add Telegram credentials (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) to Colab Secrets (key icon in left sidebar) if live notifications will be tested.
+    - Run Cells 1 through 8 in safe DRY_RUN mode for the first session.
+
+13. NEXT RECOMMENDED TASK:
+    Await user authorization before initiating the first Colab live-stream monitoring session.
+================================================================================

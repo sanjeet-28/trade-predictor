@@ -64,6 +64,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Exit cleanly after processing N video frames.",
     )
     parser.add_argument(
+        "--duration-minutes",
+        type=float,
+        default=None,
+        help="Exit cleanly after running for N minutes.",
+    )
+    parser.add_argument(
         "--test-connection",
         action="store_true",
         default=False,
@@ -118,6 +124,17 @@ def main() -> int:
             )
             is_dry_run = True
 
+    # Duration limit from argument or environment variable
+    duration_minutes = args.duration_minutes
+    if duration_minutes is None:
+        env_dur = os.environ.get("DURATION_MINUTES", "").strip()
+        if env_dur:
+            try:
+                duration_minutes = float(env_dur)
+            except ValueError:
+                pass
+    max_duration_sec = duration_minutes * 60.0 if duration_minutes is not None else None
+
     # Build and launch orchestrator
     try:
         orchestrator = TradeDetectionOrchestrator(
@@ -126,6 +143,7 @@ def main() -> int:
             dry_run=is_dry_run,
             simulate_mode=args.simulate,
             max_frames=args.max_frames,
+            max_duration_sec=max_duration_sec,
         )
         stats = orchestrator.run()
 

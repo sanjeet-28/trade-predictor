@@ -1,5 +1,7 @@
 # Forex Trade Detection & Telegram Notification System
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sanjeet-28/trade-predictor/blob/main/notebooks/Forex_Trade_Detector.ipynb)
+
 A Python application that continuously monitors a 24/5 YouTube forex trading livestream, independently identifies active trade setups through dual visual computer vision detectors, deduplicates and correlates signals in a central event manager, and delivers immediate alerts via Telegram.
 
 Strict Notification Contract: **`TRADE IS ACTIVE!`**
@@ -123,6 +125,7 @@ python main.py --simulate
 ## Project Documentation
 
 Detailed guides are available in the [docs/](file:///c:/Users/sanje/OneDrive/Desktop/Trade%20detection%20sysytem/docs) directory:
+- [COLAB_GUIDE.md](file:///c:/Users/sanje/OneDrive/Desktop/Trade%20detection%20sysytem/docs/COLAB_GUIDE.md): Complete guide for running on-demand 1–3 hour monitoring sessions on Google Colab Free.
 - [SETUP.md](file:///c:/Users/sanje/OneDrive/Desktop/Trade%20detection%20sysytem/docs/SETUP.md): Step-by-step installation, FFmpeg setup, and virtual environment guide.
 - [ARCHITECTURE.md](file:///c:/Users/sanje/OneDrive/Desktop/Trade%20detection%20sysytem/docs/ARCHITECTURE.md): Comprehensive subsystem design, outbox pattern, and state lifecycles.
 - [DEPLOYMENT.md](file:///c:/Users/sanje/OneDrive/Desktop/Trade%20detection%20sysytem/docs/DEPLOYMENT.md): Linux VPS setup, systemd daemon service, log rotation, and automated SQLite backups.
