@@ -37,6 +37,18 @@ DISQUALIFYING_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# Regex to match HUD status headers and metrics
+HUD_STATUS_PATTERN = re.compile(
+    r"(POSITION|CURRENT|TREND|BEARISH|BULLISH|15MIN|30MIN|1H|4H)",
+    re.IGNORECASE,
+)
+
+# Regex to match completed target execution markers (e.g. "TP1", "TP2", "TP3", "HIT")
+COMPLETED_MARKER_PATTERN = re.compile(
+    r"^(TP[1-3]?|HIT|CLOSED)$",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class TrackedLabel:
@@ -58,16 +70,24 @@ class LabelDetector:
     def __init__(
         self,
         roi: Optional[Tuple[int, int, int, int]] = (0, 50, 1025, 450),  # (x1, y1, x2, y2)
+        excluded_rois: Optional[List[Tuple[int, int, int, int]]] = None,
         min_confidence: float = 0.70,
+        calibration_min_confidence: float = 0.45,
+        calibration_observation_threshold: int = 2,
         max_spatial_distance_px: float = 45.0,
-        baseline_frames: int = 10,
+        chart_scroll_max_drift_px: float = 150.0,
+        baseline_frames: int = 15,
         max_missing_frames: int = 10,
         ocr_engine: Optional[Any] = None,
         scale_factor: float = 1.0,
     ) -> None:
         self.roi = roi
+        self.excluded_rois = excluded_rois if excluded_rois is not None else [(940, 370, 1280, 480)]
         self.min_confidence = min_confidence
+        self.calibration_min_confidence = calibration_min_confidence
+        self.calibration_observation_threshold = calibration_observation_threshold
         self.max_spatial_distance_px = max_spatial_distance_px
+        self.chart_scroll_max_drift_px = chart_scroll_max_drift_px
         self.baseline_frames = baseline_frames
         self.max_missing_frames = max_missing_frames
         self.scale_factor = scale_factor
@@ -84,12 +104,14 @@ class LabelDetector:
             logger.warning("No OCR engine available. LabelDetector will require an injected OCR mock.")
 
         self._tracked_labels: Dict[str, TrackedLabel] = {}
+        self._calibration_candidates: Dict[str, Dict[str, Any]] = {}
         self._frames_seen: int = 0
         self.is_calibrated: bool = False
 
     def reset(self) -> None:
         """Reset tracking state and calibration counter."""
         self._tracked_labels.clear()
+        self._calibration_candidates.clear()
         self._frames_seen = 0
         self.is_calibrated = False
         logger.debug("LabelDetector state reset.")
@@ -117,13 +139,80 @@ class LabelDetector:
         roi_img, offset_x, offset_y = self._crop_roi(frame.data)
 
         # 2. Extract Text Candidates via OCR
-        candidates = self._extract_label_candidates(roi_img, offset_x, offset_y)
+        candidates = self._extract_label_candidates(
+            roi_img, offset_x, offset_y, is_in_calibration=is_in_calibration
+        )
 
         # 3. Match Candidates with Tracked Labels
         new_events: List[DetectionEvent] = []
         matched_label_ids = set()
 
         for signal_type, bbox, confidence, raw_text in candidates:
+            if is_in_calibration:
+                # Multi-observation baseline calibration (Refinement 4):
+                # An element must be observed across at least calibration_observation_threshold frames
+                # before it is cataloged as a confirmed baseline trade.
+                matched_cand_id = None
+                for cid, cand in self._calibration_candidates.items():
+                    if cand["signal_type"] != signal_type:
+                        continue
+                    dist = cand["bbox"].distance_to(bbox)
+                    x_drift = cand["bbox"].x - bbox.x
+                    y_delta = abs(cand["bbox"].centroid[1] - bbox.centroid[1])
+                    if dist <= self.max_spatial_distance_px or (0.0 <= x_drift <= self.chart_scroll_max_drift_px and y_delta <= 12):
+                        matched_cand_id = cid
+                        break
+
+                if matched_cand_id is not None:
+                    cand = self._calibration_candidates[matched_cand_id]
+                    cand["count"] += 1
+                    cand["bbox"] = bbox
+                    cand["last_seen"] = frame.timestamp
+                    if cand["count"] >= self.calibration_observation_threshold and not cand.get("cataloged"):
+                        cand["cataloged"] = True
+                        label_id = cand["id"]
+                        tracked = TrackedLabel(
+                            label_id=label_id,
+                            signal_type=signal_type,
+                            bbox=bbox,
+                            first_seen=cand["first_seen"],
+                            last_seen=frame.timestamp,
+                            consecutive_frames=cand["count"],
+                            missing_frames=0,
+                            is_baseline=True,
+                            event_emitted=True,
+                        )
+                        self._tracked_labels[label_id] = tracked
+                        matched_label_ids.add(label_id)
+                        logger.debug(
+                            "Baseline label cataloged at %s (%s) after %d observations - notification suppressed",
+                            bbox.to_dict(),
+                            signal_type.value,
+                            cand["count"],
+                        )
+                    elif cand.get("cataloged"):
+                        label_id = cand["id"]
+                        if label_id in self._tracked_labels:
+                            tracked = self._tracked_labels[label_id]
+                            tracked.bbox = bbox
+                            tracked.last_seen = frame.timestamp
+                            tracked.consecutive_frames += 1
+                            tracked.missing_frames = 0
+                        matched_label_ids.add(label_id)
+                else:
+                    cand_id = str(uuid.uuid4())
+                    self._calibration_candidates[cand_id] = {
+                        "id": cand_id,
+                        "signal_type": signal_type,
+                        "bbox": bbox,
+                        "first_seen": frame.timestamp,
+                        "last_seen": frame.timestamp,
+                        "count": 1,
+                        "cataloged": False,
+                    }
+                continue
+
+            # Post-calibration normal detection:
             matched_id = self._find_matching_tracked_label(signal_type, bbox)
 
             if matched_id is not None:
@@ -137,7 +226,6 @@ class LabelDetector:
             else:
                 # Discovered a brand-new label appearance
                 label_id = str(uuid.uuid4())
-                is_baseline = is_in_calibration
                 tracked = TrackedLabel(
                     label_id=label_id,
                     signal_type=signal_type,
@@ -146,38 +234,34 @@ class LabelDetector:
                     last_seen=frame.timestamp,
                     consecutive_frames=1,
                     missing_frames=0,
-                    is_baseline=is_baseline,
-                    event_emitted=is_baseline,  # Mark as emitted if baseline to suppress event
+                    is_baseline=False,
+                    event_emitted=True,
                 )
                 self._tracked_labels[label_id] = tracked
                 matched_label_ids.add(label_id)
 
-                if is_in_calibration:
-                    logger.debug(
-                        "Baseline label cataloged at %s (%s, score=%.2f) - notification suppressed",
-                        bbox.to_dict(),
-                        signal_type.value,
-                        confidence,
-                    )
-                else:
-                    # Emit new detection event
-                    tracked.event_emitted = True
-                    event = DetectionEvent(
-                        detector_type=DetectorType.LABEL,
-                        signal_type=signal_type,
-                        confidence=confidence,
-                        bbox=bbox,
-                        timestamp=frame.timestamp,
-                        raw_metadata={"raw_text": raw_text, "frames_seen": self._frames_seen},
-                    )
-                    new_events.append(event)
-                    logger.info(
-                        "NEW TRADE LABEL DETECTED: %s at %s (confidence=%.2f, text='%s')",
-                        signal_type.value,
-                        bbox.to_dict(),
-                        confidence,
-                        raw_text,
-                    )
+                # Emit new detection event
+                event = DetectionEvent(
+                    detector_type=DetectorType.LABEL,
+                    signal_type=signal_type,
+                    confidence=confidence,
+                    bbox=bbox,
+                    timestamp=frame.timestamp,
+                    raw_metadata={"raw_text": raw_text, "frames_seen": self._frames_seen},
+                )
+                new_events.append(event)
+                logger.info(
+                    "NEW TRADE LABEL DETECTED: %s at %s (confidence=%.2f, text='%s')",
+                    signal_type.value,
+                    bbox.to_dict(),
+                    confidence,
+                    raw_text,
+                )
+
+        # 4. Handle Disappeared / Missing Labels
+        self._prune_missing_labels(matched_label_ids)
+
+        return new_events
 
         # 4. Handle Disappeared / Missing Labels
         self._prune_missing_labels(matched_label_ids)
@@ -215,6 +299,7 @@ class LabelDetector:
         roi_img: np.ndarray,
         offset_x: int,
         offset_y: int,
+        is_in_calibration: bool = False,
     ) -> List[Tuple[TradeSignalType, BoundingBox, float, str]]:
         """Run OCR on ROI image and return classified BUY/SELL candidates with global coordinates."""
         if self._ocr is None:
@@ -229,12 +314,30 @@ class LabelDetector:
         if not ocr_results:
             return []
 
-        candidates: List[Tuple[TradeSignalType, BoundingBox, float, str]] = []
-
+        # First collect all detected text boxes with their coordinates in global frame
+        all_boxes: List[Tuple[str, BoundingBox, float]] = []
         for item in ocr_results:
             box_points, raw_text, confidence = item[0], item[1], float(item[2])
+            min_x = min(p[0] for p in box_points)
+            min_y = min(p[1] for p in box_points)
+            max_x = max(p[0] for p in box_points)
+            max_y = max(p[1] for p in box_points)
+            if self.scale_factor != 1.0:
+                min_x /= self.scale_factor
+                min_y /= self.scale_factor
+                max_x /= self.scale_factor
+                max_y /= self.scale_factor
+            gx = int(round(min_x + offset_x))
+            gy = int(round(min_y + offset_y))
+            gw = int(round(max_x - min_x))
+            gh = int(round(max_y - min_y))
+            all_boxes.append((raw_text, BoundingBox(gx, gy, max(1, gw), max(1, gh)), confidence))
 
-            if confidence < self.min_confidence:
+        candidates: List[Tuple[TradeSignalType, BoundingBox, float, str]] = []
+        target_thresh = self.calibration_min_confidence if is_in_calibration else self.min_confidence
+
+        for raw_text, bbox, confidence in all_boxes:
+            if confidence < target_thresh:
                 continue
 
             # Classify string into BUY or SELL
@@ -242,26 +345,63 @@ class LabelDetector:
             if signal is None:
                 continue
 
-            # Compute bounding box in local ROI coordinates
-            min_x = min(p[0] for p in box_points)
-            min_y = min(p[1] for p in box_points)
-            max_x = max(p[0] for p in box_points)
-            max_y = max(p[1] for p in box_points)
+            cx, cy = bbox.centroid
 
-            # Revert scaling factor if applicable
-            if self.scale_factor != 1.0:
-                min_x /= self.scale_factor
-                min_y /= self.scale_factor
-                max_x /= self.scale_factor
-                max_y /= self.scale_factor
+            # 1. Static HUD Exclusion Zone Check (Refinement 1)
+            in_excluded = False
+            for ex1, ey1, ex2, ey2 in self.excluded_rois:
+                if ex1 <= cx <= ex2 and ey1 <= cy <= ey2:
+                    in_excluded = True
+                    break
+            if in_excluded:
+                logger.debug(
+                    "Label candidate '%s' at %s rejected by static HUD exclusion",
+                    raw_text,
+                    bbox.to_dict(),
+                )
+                continue
 
-            # Convert to global frame coordinates
-            global_x = int(round(min_x + offset_x))
-            global_y = int(round(min_y + offset_y))
-            global_w = int(round(max_x - min_x))
-            global_h = int(round(max_y - min_y))
+            # 2. Contextual Status HUD Keyword Check (Refinement 1)
+            is_hud_element = False
+            for other_text, other_bbox, _ in all_boxes:
+                if other_bbox == bbox:
+                    continue
+                dx = abs(other_bbox.centroid[0] - cx)
+                dy = abs(other_bbox.centroid[1] - cy)
+                if dx <= 90 and dy <= 30:
+                    if HUD_STATUS_PATTERN.search(other_text):
+                        is_hud_element = True
+                        break
+            if is_hud_element:
+                logger.debug(
+                    "Label candidate '%s' at %s rejected: adjacent to HUD status text",
+                    raw_text,
+                    bbox.to_dict(),
+                )
+                continue
 
-            bbox = BoundingBox(x=global_x, y=global_y, width=max(1, global_w), height=max(1, global_h))
+            # 3. Contextual Completed Target Milestone Marker Check (Refinement 2)
+            # Planned targets (e.g. "TP: 1.0850", "SL: 1.0750") on a new trade are NOT rejected.
+            # Only isolated milestone stamps (e.g. strictly "TP1", "TP2", "HIT") on a completed historical candle are rejected.
+            has_completed_marker = False
+            for other_text, other_bbox, _ in all_boxes:
+                if other_bbox == bbox:
+                    continue
+                dx = abs(other_bbox.centroid[0] - cx)
+                dy = abs(other_bbox.centroid[1] - cy)
+                if dx <= 65 and dy <= 20:
+                    clean_other = other_text.strip()
+                    if COMPLETED_MARKER_PATTERN.match(clean_other):
+                        has_completed_marker = True
+                        break
+            if has_completed_marker:
+                logger.debug(
+                    "Label candidate '%s' at %s rejected: adjacent to completed target milestone",
+                    raw_text,
+                    bbox.to_dict(),
+                )
+                continue
+
             candidates.append((signal, bbox, confidence, raw_text))
 
         return candidates
@@ -309,15 +449,26 @@ class LabelDetector:
                 min_distance = dist
                 best_id = label_id
 
+            # Check directional leftward chart scroll drift (Refinements 2 & 3)
+            # Candlesticks drift leftward: 0 <= (tracked.bbox.x - bbox.x) <= chart_scroll_max_drift_px
+            # Vertical alignment: price level within 12px
+            x_drift = tracked.bbox.x - bbox.x
+            y_delta = abs(tracked.bbox.centroid[1] - bbox.centroid[1])
+            if 0.0 <= x_drift <= self.chart_scroll_max_drift_px and y_delta <= 12:
+                if dist < min_distance:
+                    min_distance = dist
+                    best_id = label_id
+
         return best_id
 
     def _prune_missing_labels(self, matched_label_ids: set) -> None:
-        """Increment missing frame counts for unseen labels and remove expired ones."""
+        """Increment missing frame counts for unseen labels and remove expired non-baseline ones."""
         to_delete = []
         for label_id, tracked in self._tracked_labels.items():
             if label_id not in matched_label_ids:
                 tracked.missing_frames += 1
-                if tracked.missing_frames > self.max_missing_frames:
+                # Baseline elements must NEVER be pruned due to temporary OCR misses
+                if not tracked.is_baseline and tracked.missing_frames > self.max_missing_frames:
                     to_delete.append(label_id)
 
         for label_id in to_delete:

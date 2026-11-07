@@ -87,10 +87,28 @@ class TradeDetectionOrchestrator:
 
         # 3. Detectors
         self.label_detector = label_detector or LabelDetector(
+            roi=getattr(self.config.detection, "label_roi", (0, 50, 1025, 450)),
+            excluded_rois=getattr(self.config.detection, "excluded_rois", [(940, 370, 1280, 480)]),
+            min_confidence=getattr(self.config.detection, "min_confidence", 0.70),
+            calibration_min_confidence=getattr(self.config.detection, "calibration_min_confidence", 0.45),
             baseline_frames=self.config.detection.baseline_calibration_frames,
+            max_spatial_distance_px=getattr(self.config.detection, "label_max_spatial_distance_px", 45.0),
+            chart_scroll_max_drift_px=getattr(self.config.detection, "chart_scroll_max_drift_px", 150.0),
+            max_missing_frames=getattr(self.config.detection, "label_max_missing_frames", 10),
         )
         self.box_detector = box_detector or BoxDetector(
+            roi=getattr(self.config.detection, "box_roi", (0, 60, 920, 600)),
+            excluded_rois=getattr(self.config.detection, "excluded_rois", [(940, 370, 1280, 480)]),
+            min_box_area=getattr(self.config.detection, "box_min_area", 400),
+            min_box_width=getattr(self.config.detection, "box_min_width", 35),
+            min_box_height=getattr(self.config.detection, "box_min_height", 25),
+            min_aspect_ratio=getattr(self.config.detection, "box_min_aspect_ratio", 0.25),
+            max_aspect_ratio=getattr(self.config.detection, "box_max_aspect_ratio", 8.0),
+            iou_match_threshold=getattr(self.config.detection, "box_iou_threshold", 0.40),
+            max_entry_delta_y=getattr(self.config.detection, "box_max_entry_delta_y", 12),
+            confirmation_frames=getattr(self.config.detection, "box_confirmation_frames", 1),
             baseline_frames=self.config.detection.baseline_calibration_frames,
+            max_missing_frames=getattr(self.config.detection, "box_max_missing_frames", 10),
         )
 
         # 4. Central Event Manager

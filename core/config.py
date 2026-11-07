@@ -43,7 +43,8 @@ class StreamConfig:
 @dataclass
 class DetectionConfig:
     """Detector thresholds, geometry tolerances, and calibration settings."""
-    baseline_calibration_frames: int = 10
+    baseline_calibration_frames: int = 15
+    calibration_min_confidence: float = 0.45
     min_box_area: int = 400
     iou_match_threshold: float = 0.50
     max_centroid_distance_px: float = 50.0
@@ -51,6 +52,9 @@ class DetectionConfig:
     label_roi: Optional[Tuple[int, int, int, int]] = (0, 50, 1025, 450)
     label_max_spatial_distance_px: float = 45.0
     label_max_missing_frames: int = 10
+    excluded_rois: List[Tuple[int, int, int, int]] = field(
+        default_factory=lambda: [(940, 370, 1280, 480)]
+    )
     # Detector B (Trade-Position Box) settings
     box_roi: Optional[Tuple[int, int, int, int]] = (0, 60, 920, 600)
     box_min_area: int = 400
@@ -70,6 +74,8 @@ class DetectionConfig:
     cross_detector_entry_delta_y: int = 25
     candidate_expiry_sec: float = 30.0
     active_trade_max_missing_sec: float = 120.0
+    chart_scroll_max_drift_px: float = 150.0
+    closed_trades_history_ttl_sec: float = 86400.0
     recover_on_startup: bool = True
 
 
@@ -209,33 +215,46 @@ def load_config(
     else:
         box_roi_tuple = DetectionConfig.box_roi
 
+    excluded_rois_raw = detection_data.get("excluded_rois", None)
+    excluded_rois_list: List[Tuple[int, int, int, int]] = []
+    if isinstance(excluded_rois_raw, list):
+        for item in excluded_rois_raw:
+            if isinstance(item, (list, tuple)) and len(item) == 4:
+                excluded_rois_list.append((int(item[0]), int(item[1]), int(item[2]), int(item[3])))
+    if not excluded_rois_list:
+        excluded_rois_list = [(940, 370, 1280, 480)]
+
     detection_cfg = DetectionConfig(
-        baseline_calibration_frames=int(detection_data.get("baseline_calibration_frames", DetectionConfig.baseline_calibration_frames)),
-        min_box_area=int(detection_data.get("min_box_area", DetectionConfig.min_box_area)),
-        iou_match_threshold=float(detection_data.get("iou_match_threshold", DetectionConfig.iou_match_threshold)),
-        max_centroid_distance_px=float(detection_data.get("max_centroid_distance_px", DetectionConfig.max_centroid_distance_px)),
-        min_confidence=float(detection_data.get("min_confidence", DetectionConfig.min_confidence)),
+        baseline_calibration_frames=int(detection_data.get("baseline_calibration_frames", 15)),
+        calibration_min_confidence=float(detection_data.get("calibration_min_confidence", 0.45)),
+        min_box_area=int(detection_data.get("min_box_area", 400)),
+        iou_match_threshold=float(detection_data.get("iou_match_threshold", 0.50)),
+        max_centroid_distance_px=float(detection_data.get("max_centroid_distance_px", 50.0)),
+        min_confidence=float(detection_data.get("min_confidence", 0.70)),
         label_roi=label_roi_tuple,
-        label_max_spatial_distance_px=float(detection_data.get("label_max_spatial_distance_px", DetectionConfig.label_max_spatial_distance_px)),
-        label_max_missing_frames=int(detection_data.get("label_max_missing_frames", DetectionConfig.label_max_missing_frames)),
+        label_max_spatial_distance_px=float(detection_data.get("label_max_spatial_distance_px", 45.0)),
+        label_max_missing_frames=int(detection_data.get("label_max_missing_frames", 10)),
+        excluded_rois=excluded_rois_list,
         box_roi=box_roi_tuple,
-        box_min_area=int(detection_data.get("box_min_area", DetectionConfig.box_min_area)),
-        box_min_width=int(detection_data.get("box_min_width", DetectionConfig.box_min_width)),
-        box_min_height=int(detection_data.get("box_min_height", DetectionConfig.box_min_height)),
-        box_min_aspect_ratio=float(detection_data.get("box_min_aspect_ratio", DetectionConfig.box_min_aspect_ratio)),
-        box_max_aspect_ratio=float(detection_data.get("box_max_aspect_ratio", DetectionConfig.box_max_aspect_ratio)),
-        box_iou_threshold=float(detection_data.get("box_iou_threshold", DetectionConfig.box_iou_threshold)),
-        box_max_entry_delta_y=int(detection_data.get("box_max_entry_delta_y", DetectionConfig.box_max_entry_delta_y)),
-        box_confirmation_frames=int(detection_data.get("box_confirmation_frames", DetectionConfig.box_confirmation_frames)),
-        box_max_missing_frames=int(detection_data.get("box_max_missing_frames", DetectionConfig.box_max_missing_frames)),
-        correlation_window_sec=float(detection_data.get("correlation_window_sec", DetectionConfig.correlation_window_sec)),
-        label_confirmation_count=int(detection_data.get("label_confirmation_count", DetectionConfig.label_confirmation_count)),
-        box_confirmation_count=int(detection_data.get("box_confirmation_count", DetectionConfig.box_confirmation_count)),
-        cross_detector_spatial_threshold_px=float(detection_data.get("cross_detector_spatial_threshold_px", DetectionConfig.cross_detector_spatial_threshold_px)),
-        cross_detector_entry_delta_y=int(detection_data.get("cross_detector_entry_delta_y", DetectionConfig.cross_detector_entry_delta_y)),
-        candidate_expiry_sec=float(detection_data.get("candidate_expiry_sec", DetectionConfig.candidate_expiry_sec)),
-        active_trade_max_missing_sec=float(detection_data.get("active_trade_max_missing_sec", DetectionConfig.active_trade_max_missing_sec)),
-        recover_on_startup=bool(detection_data.get("recover_on_startup", DetectionConfig.recover_on_startup)),
+        box_min_area=int(detection_data.get("box_min_area", 400)),
+        box_min_width=int(detection_data.get("box_min_width", 35)),
+        box_min_height=int(detection_data.get("box_min_height", 25)),
+        box_min_aspect_ratio=float(detection_data.get("box_min_aspect_ratio", 0.25)),
+        box_max_aspect_ratio=float(detection_data.get("box_max_aspect_ratio", 8.0)),
+        box_iou_threshold=float(detection_data.get("box_iou_threshold", 0.40)),
+        box_max_entry_delta_y=int(detection_data.get("box_max_entry_delta_y", 12)),
+        box_confirmation_frames=int(detection_data.get("box_confirmation_frames", 1)),
+        box_max_missing_frames=int(detection_data.get("box_max_missing_frames", 10)),
+        correlation_window_sec=float(detection_data.get("correlation_window_sec", 60.0)),
+        label_confirmation_count=int(detection_data.get("label_confirmation_count", 1)),
+        box_confirmation_count=int(detection_data.get("box_confirmation_count", 1)),
+        cross_detector_spatial_threshold_px=float(detection_data.get("cross_detector_spatial_threshold_px", 60.0)),
+        cross_detector_entry_delta_y=int(detection_data.get("cross_detector_entry_delta_y", 25)),
+        candidate_expiry_sec=float(detection_data.get("candidate_expiry_sec", 30.0)),
+        active_trade_max_missing_sec=float(detection_data.get("active_trade_max_missing_sec", 120.0)),
+        chart_scroll_max_drift_px=float(detection_data.get("chart_scroll_max_drift_px", 150.0)),
+        closed_trades_history_ttl_sec=float(detection_data.get("closed_trades_history_ttl_sec", 86400.0)),
+        recover_on_startup=bool(detection_data.get("recover_on_startup", True)),
     )
 
     telegram_cfg = TelegramConfig(

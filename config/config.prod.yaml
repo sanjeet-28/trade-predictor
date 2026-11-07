@@ -16,13 +16,17 @@ stream:
   max_frame_delay_sec: 10.0
 
 detection:
-  baseline_calibration_frames: 10
+  baseline_calibration_frames: 15
+  calibration_min_confidence: 0.45
   min_box_area: 400
   iou_match_threshold: 0.50
   max_centroid_distance_px: 50.0
   min_confidence: 0.70
   # Optimized LabelDetector ROI: excludes right-hand order book / price numbers to guarantee <1.0s inference
   label_roi: [0, 50, 1025, 450]
+  # Excluded regions: static UI HUD / analytics panels on the stream (e.g. Current Position HUD)
+  excluded_rois:
+    - [940, 370, 1280, 480]
   label_max_spatial_distance_px: 45.0
   label_max_missing_frames: 10
   box_roi: [0, 60, 920, 600]
@@ -42,6 +46,8 @@ detection:
   cross_detector_entry_delta_y: 25
   candidate_expiry_sec: 30.0
   active_trade_max_missing_sec: 120.0
+  chart_scroll_max_drift_px: 150.0
+  closed_trades_history_ttl_sec: 86400.0
   recover_on_startup: true
 
 telegram:

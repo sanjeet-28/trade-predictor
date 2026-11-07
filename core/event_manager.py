@@ -69,6 +69,8 @@ class EventManager:
         cross_detector_entry_delta_y: Optional[int] = None,
         candidate_expiry_sec: Optional[float] = None,
         active_trade_max_missing_sec: Optional[float] = None,
+        chart_scroll_max_drift_px: Optional[float] = None,
+        closed_trades_history_ttl_sec: Optional[float] = None,
         baseline_calibration_frames: Optional[int] = None,
         recover_on_startup: Optional[bool] = None,
     ) -> None:
@@ -109,10 +111,20 @@ class EventManager:
             if active_trade_max_missing_sec is not None
             else getattr(det_cfg, "active_trade_max_missing_sec", 120.0)
         )
+        self.chart_scroll_max_drift_px = (
+            chart_scroll_max_drift_px
+            if chart_scroll_max_drift_px is not None
+            else getattr(det_cfg, "chart_scroll_max_drift_px", 150.0)
+        )
+        self.closed_trades_history_ttl_sec = (
+            closed_trades_history_ttl_sec
+            if closed_trades_history_ttl_sec is not None
+            else getattr(det_cfg, "closed_trades_history_ttl_sec", 86400.0)
+        )
         self.baseline_calibration_frames = (
             baseline_calibration_frames
             if baseline_calibration_frames is not None
-            else getattr(det_cfg, "baseline_calibration_frames", 10)
+            else getattr(det_cfg, "baseline_calibration_frames", 15)
         )
         self.recover_on_startup = (
             recover_on_startup
@@ -125,6 +137,7 @@ class EventManager:
 
         # In-memory tracking state
         self._active_trades: Dict[str, TradeRecord] = {}
+        self._closed_trades_history: Dict[str, TradeRecord] = {}
         self._candidates: Dict[str, CandidateEvent] = {}
         self._pending_persist_trades: Dict[str, Tuple[TradeRecord, List[DetectionEvent]]] = {}
         self._frames_seen: int = 0
@@ -137,6 +150,7 @@ class EventManager:
     def reset(self) -> None:
         """Reset internal memory state."""
         self._active_trades.clear()
+        self._closed_trades_history.clear()
         self._candidates.clear()
         self._pending_persist_trades.clear()
         self._frames_seen = 0
@@ -277,6 +291,7 @@ class EventManager:
             if elapsed_sec > self.active_trade_max_missing_sec:
                 trade.state = TradeState.CLOSED
                 closed_trade_ids.append(tid)
+                self._closed_trades_history[tid] = trade
                 del self._active_trades[tid]
 
                 if self.trade_repo:
@@ -289,6 +304,14 @@ class EventManager:
                     "Trade %s closed after %.1fs of inactivity at %s",
                     tid, elapsed_sec, trade.bbox.to_dict(),
                 )
+
+        # 3. Purge expired closed trades beyond historical TTL
+        expired_closed = [
+            tid for tid, tr in self._closed_trades_history.items()
+            if (now - tr.last_seen_at).total_seconds() > self.closed_trades_history_ttl_sec
+        ]
+        for tid in expired_closed:
+            del self._closed_trades_history[tid]
 
         return closed_trade_ids
 
@@ -378,6 +401,45 @@ class EventManager:
                 candidates.append((trade, evidence_count, match_score))
 
         if not candidates:
+            # Check closed trades history for multi-evidence scroll drift correlation (Refinements 2 & 3)
+            # A scrolled historical trade must NOT re-activate as a new trade.
+            for closed_tid, closed_trade in self._closed_trades_history.items():
+                # 1. Direction consistency
+                closed_signal = closed_trade.metadata.get("signal_type")
+                if event.signal_type.value != closed_signal:
+                    continue
+
+                # 2. Vertical price level alignment (entry line or centroid y within 8px)
+                closed_entry = closed_trade.metadata.get("entry_y")
+                event_entry = event.raw_metadata.get("entry_y")
+                if closed_entry is not None and event_entry is not None:
+                    y_delta = abs(closed_entry - event_entry)
+                else:
+                    y_delta = abs(closed_trade.bbox.centroid[1] - event.bbox.centroid[1])
+                if y_delta > 8:
+                    continue
+
+                # 3. Directional leftward chart scroll drift
+                # Candlesticks drift leftward as time progresses: x_event < x_closed by at least 15px
+                x_drift = closed_trade.bbox.x - event.bbox.x
+                if not (15.0 <= x_drift <= self.chart_scroll_max_drift_px):
+                    continue
+
+                # 4. Temporal lifecycle consistency: event observed after trade was first created
+                if event.timestamp < closed_trade.first_detected_at:
+                    continue
+
+                # All 4 independent pieces of evidence confirmed -> Correlated as scrolled historical trade!
+                closed_trade.last_seen_at = max(closed_trade.last_seen_at, event.timestamp)
+                logger.debug(
+                    "Event %s correlated with scrolled historical trade %s (drift=%dpx, dy=%dpx). Suppressing re-activation.",
+                    event.event_id,
+                    closed_trade.trade_id,
+                    x_drift,
+                    y_delta,
+                )
+                return closed_trade
+
             return None
 
         if len(candidates) == 1:

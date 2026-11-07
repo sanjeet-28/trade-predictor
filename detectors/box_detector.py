@@ -53,6 +53,7 @@ class BoxDetector:
     def __init__(
         self,
         roi: Optional[Tuple[int, int, int, int]] = (0, 60, 920, 600),  # (x1, y1, x2, y2)
+        excluded_rois: Optional[List[Tuple[int, int, int, int]]] = None,
         min_box_area: int = 400,
         min_box_width: int = 35,
         min_box_height: int = 25,
@@ -61,7 +62,7 @@ class BoxDetector:
         iou_match_threshold: float = 0.40,
         max_entry_delta_y: int = 12,
         confirmation_frames: int = 1,
-        baseline_frames: int = 10,
+        baseline_frames: int = 15,
         max_missing_frames: int = 10,
         # Configurable HSV color ranges with sensible defaults for TradingView charts
         green_hsv_range: Tuple[Tuple[int, int, int], Tuple[int, int, int]] = (
@@ -77,6 +78,7 @@ class BoxDetector:
         ),
     ) -> None:
         self.roi = roi
+        self.excluded_rois = excluded_rois if excluded_rois is not None else [(940, 370, 1280, 480)]
         self.min_box_area = min_box_area
         self.min_box_width = min_box_width
         self.min_box_height = min_box_height
@@ -352,6 +354,20 @@ class BoxDetector:
                 global_profit_bbox = BoundingBox(x=gx + offset_x, y=gy + offset_y, width=gw, height=gh)
                 global_loss_bbox = BoundingBox(x=rx + offset_x, y=ry + offset_y, width=rw, height=rh)
 
+                # Check Static HUD Exclusion Zones (Refinement 1)
+                cx, cy = global_bbox.centroid
+                in_excluded = False
+                for ex1, ey1, ex2, ey2 in self.excluded_rois:
+                    if ex1 <= cx <= ex2 and ey1 <= cy <= ey2:
+                        in_excluded = True
+                        break
+                if in_excluded:
+                    logger.debug(
+                        "Position box candidate at %s rejected by static HUD exclusion",
+                        global_bbox.to_dict(),
+                    )
+                    continue
+
                 # Confidence score proportional to horizontal alignment and structure
                 confidence = float(min(0.99, 0.70 + 0.25 * (h_overlap / min_w)))
 
@@ -424,7 +440,12 @@ class BoxDetector:
                 h_overlap = max(0, h_overlap_end - h_overlap_start)
                 min_w = min(tracked.bbox.width, candidate.bbox.width)
 
-                if min_w > 0 and (h_overlap / min_w) >= 0.25:
+                if min_w > 0 and (h_overlap / min_w) >= 0.20:
+                    return box_id
+
+                # Horizontal expansion / resizing tracking:
+                # If box extends rightward with forming candles but shares origin candle (within 25px)
+                if abs(tracked.bbox.x - candidate.bbox.x) <= 25:
                     return box_id
 
             # 2. Check Bounding Box IoU
@@ -441,7 +462,7 @@ class BoxDetector:
         for box_id, tracked in self._tracked_boxes.items():
             if box_id not in matched_box_ids:
                 tracked.missing_frames += 1
-                if tracked.missing_frames > self.max_missing_frames:
+                if not tracked.is_baseline and tracked.missing_frames > self.max_missing_frames:
                     to_delete.append(box_id)
 
         for box_id in to_delete:

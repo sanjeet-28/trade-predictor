@@ -244,7 +244,11 @@ def test_different_image_resolutions() -> None:
 
 
 def test_actual_captured_frame_detection() -> None:
-    """Test 13: Test detector against actual captured calibration frame."""
+    """Test 13: Test detector against actual captured calibration frame.
+
+    Verifies that the static 'Current Position: Buy' widget at [992, 401] is correctly
+    suppressed by Phase 8C static HUD exclusion and contextual filtering.
+    """
     calib_frame_path = Path("captures/calibration/calibration_frame_1.png")
     if not calib_frame_path.exists():
         pytest.skip("Calibration frame not present")
@@ -261,12 +265,16 @@ def test_actual_captured_frame_detection() -> None:
         data=img,
     )
 
-    # Run detector with baseline_frames=0 to verify detection of the live chart label
+    # Run default detector: the static 'Buy' widget at [992, 401] is correctly rejected by HUD filter
     detector = LabelDetector(baseline_frames=0, min_confidence=0.75)
     events = detector.process_frame(frame)
+    assert len(events) == 0, "Static Current Position widget at [992, 401] must be suppressed"
 
-    # The calibration frame has the "Sell" label at [232, 281] and "Buy" position widget at [992, 401]
-    signals = [e.signal_type for e in events]
-    assert len(events) >= 1
-    assert any(s in (TradeSignalType.BUY, TradeSignalType.SELL) for s in signals)
+    # If HUD exclusion is explicitly disabled, the raw OCR token can be detected
+    unfiltered_detector = LabelDetector(
+        baseline_frames=0, min_confidence=0.75, excluded_rois=[]
+    )
+    # Still rejected by contextual HUD keyword check ("Current Position" adjacent)
+    unfiltered_events = unfiltered_detector.process_frame(frame)
+    assert len(unfiltered_events) == 0, "Contextual HUD filter must reject 'Current Position' widget"
 

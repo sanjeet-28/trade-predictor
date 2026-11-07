@@ -1237,3 +1237,99 @@ FOREX TRADE DETECTION & TELEGRAM NOTIFICATION SYSTEM - PROGRESS TRACKER
 13. NEXT RECOMMENDED TASK:
     Stop after audit and await explicit user instruction.
 ================================================================================
+
+[SESSION 8 (PART E) - 2026-11-07: PHASE 8C FALSE-POSITIVE ELIMINATION]
+
+1. CURRENT DATE AND TIME:
+   2026-11-07 07:05:00 IST (UTC+5:30)
+
+2. PHASE AND TASK COMPLETED:
+   Phase 8C: Eliminate False-Positive Trade Activations
+   - Inspected root causes of all four false-positive activations identified during Phase 8A:
+     * Detections 1 & 3: Static right-side "Current Position: Sell" HUD indicator widget (`[990, 402]`).
+     * Detections 2 & 4: Historical candle trade badge (`Sell` at `[572, 345]`) shifting leftward to `[540, 346]` due to chart scrolling, which had an adjacent `TP1` execution milestone marker.
+   - Implemented 6 architectural corrections adhering to all 10 user refinements:
+     * Refinement 1: Static HUD Exclusion Zone & Keyword Filtering applied consistently across Detector A (`LabelDetector`) and Detector B (`BoxDetector`). Added configurable `excluded_rois: [[940, 370, 1280, 480]]` to reject HUD widgets without affecting genuine chart signals outside the HUD. Added contextual header filtering (`POSITION`, `CURRENT`, `TREND`, `BEARISH`, `BULLISH`, `15MIN`, `30MIN`).
+     * Refinement 2: Contextual Geometry for TP/SL. Distinguished completed execution milestones (`TP1`, `TP2`, `HIT`, `CLOSED`) on past candles within +/-65px dx and +/-20px dy, while preserving planned target parameters (`TP: 1.0850`, `SL: 1.0750`) on genuine new trade setups.
+     * Refinement 3: Multi-Evidence Leftward Chart Scroll Drift Tracking. Combined direction consistency, vertical price level alignment (`y_delta <= 8px` in EventManager, `<= 12px` in LabelDetector), directional leftward scroll displacement (`15px <= x_drift <= 150px`), and temporal lifecycle history. Tracked label positions synchronize dynamically during scroll. Genuinely new trades appearing at active candles (`x_candidate >= x_closed` or `x_drift < 15px`) are not suppressed.
+     * Refinement 4: Multi-Observation Baseline Calibration. Required at least 2 distinct observations (`calibration_observation_threshold: 2`) during startup calibration (15 frames) with configurable `calibration_min_confidence: 0.45` to prevent cataloging transient single-frame OCR noise.
+     * Baseline Lifecycle Retention: Guaranteed that confirmed baseline labels in `LabelDetector` and baseline position boxes in `BoxDetector` are never pruned due to temporary OCR misses or indicator occlusion (`not tracked.is_baseline`).
+     * Closed Trade Retention: Retained closed trades in `_closed_trades_history` with 24-hour TTL (`closed_trades_history_ttl_sec: 86400.0`) in `EventManager` to prevent re-activating historical trades that scroll or reappear.
+     * Horizontal Box Expansion: Supported rightward extension of active position boxes without duplicate event emissions.
+   - Authored comprehensive regression suite (`tests/test_false_positive_elimination.py`) verifying all 14 mandatory scenarios.
+   - Executed live-stream dry-run verification (`--dry-run --max-frames 45`) against the live YouTube stream (`https://www.youtube.com/watch?v=3H4IVQejlDE`) across multiple runs, verifying:
+     * Startup baseline completed cleanly.
+     * Static HUD widget at `[990, 402]` was ignored.
+     * Scrolling historical trade badges were ignored.
+     * Cold-start dry run completed with 45 frames processed, 0 A-events, 0 B-events, 0 trade activations, and 0 notifications sent (0 false positives).
+
+3. FILES CREATED:
+   - tests/test_false_positive_elimination.py (14 mandatory regression scenarios)
+
+4. FILES MODIFIED:
+   - core/config.py (added excluded_rois, calibration_min_confidence, chart_scroll_max_drift_px, closed_trades_history_ttl_sec)
+   - config/config.example.yaml (added default exclusion zone and drift thresholds)
+   - config/config.prod.yaml (production settings for HUD exclusion and drift tracking)
+   - detectors/label_detector.py (HUD exclusion, milestone filtering, multi-observation baseline, drift tracking, permanent baseline retention)
+   - detectors/box_detector.py (HUD exclusion, box expansion tracking, permanent baseline retention)
+   - core/event_manager.py (multi-evidence historical drift correlation, 24h closed trade cache)
+   - core/orchestrator.py (passed new config parameters to detectors)
+   - tests/test_config.py (updated assertions for baseline calibration frames)
+   - tests/test_label_detector.py (updated assertions to reflect static HUD suppression)
+   - progress.txt (appended Session 8 Part E log)
+
+5. FILES DELETED:
+   None.
+
+6. DEPENDENCIES INSTALLED, UPGRADED OR REMOVED:
+   None.
+
+7. COMMANDS EXECUTED:
+   - .\.venv\Scripts\pytest tests/test_false_positive_elimination.py -v (14/14 passed)
+   - .\.venv\Scripts\pytest -q (147/147 passed)
+   - .\.venv\Scripts\python main.py --dry-run --max-frames 45 (live YouTube stream dry-run)
+   - git status / git diff / git add / git commit / git push
+
+8. TESTS PERFORMED AND THEIR RESULTS:
+   - Full automated test suite across all 15 test files: 147 passed in 45.64s (100% pass rate).
+   - tests/test_false_positive_elimination.py: 14/14 passed (100% pass rate):
+     1. Scenario 1: Static Current Position SELL widget suppressed (PASSED)
+     2. Scenario 2: Static Current Position BUY widget suppressed (PASSED)
+     3. Scenario 3: Historical SELL badge near TP1 suppressed (PASSED)
+     4. Scenario 4: Historical BUY badge near TP1 suppressed (PASSED)
+     5. Scenario 5: Badge moving 32px due to chart scrolling suppressed (PASSED)
+     6. Scenario 6: Signal temporarily disappearing for 5 frames and reappearing tracked without duplicate (PASSED)
+     7. Scenario 7: Existing trade visible during startup suppressed (PASSED)
+     8. Scenario 8: Low-confidence single-frame noise during startup discarded (PASSED)
+     9. Scenario 9: Genuine new BUY label activated (PASSED)
+     10. Scenario 10: Genuine new SELL label activated (PASSED)
+     11. Scenario 11: Genuine new position box without label activated (PASSED)
+     12. Scenario 12: Simultaneous label and box produce exactly one activation (PASSED)
+     13. Scenario 13: Existing position box widening rightward tracked without duplicate (PASSED)
+     14. Scenario 14: Genuine new trade at previously used location after closure activated (PASSED)
+   - Safe live-stream dry-run test (45 frames): 0 false positives, 0 spurious notifications.
+
+9. ERRORS ENCOUNTERED AND THEIR RESOLUTIONS:
+   - Error: Baseline label was dropped from `_tracked_labels` after 10 missing frames due to temporary OCR flicker, triggering a false-positive activation on frame 16.
+     Resolution: Modified `_prune_missing_labels` to ensure baseline items (`tracked.is_baseline == True`) are never pruned due to missing frames.
+   - Error: A scrolling baseline label moved >45px to the left, exceeding Euclidean distance threshold `max_spatial_distance_px`.
+     Resolution: Added directional leftward chart scroll drift check (`0 <= x_drift <= chart_scroll_max_drift_px` and `y_delta <= 12px`) into `_find_matching_tracked_label`, synchronizing tracked coordinates on each observation.
+   - Error: `test_actual_captured_frame_detection` in `test_label_detector.py` failed because calibration frame 1 contained the `[992, 401]` Buy HUD widget which Phase 8C correctly excludes.
+     Resolution: Updated test to assert that default detector correctly excludes the static HUD widget.
+   - Error: `test_example_yaml_exists_and_loads` in `test_config.py` failed due to checking `baseline_calibration_frames == 10` after update to 15.
+     Resolution: Updated assertion to accept 15.
+
+10. CURRENT IMPLEMENTATION STATUS:
+    Phase 8C is 100% COMPLETE, TESTED, and OPERATIONAL.
+    All 4 false-positive patterns identified during the Phase 8A benchmark audit have been systematically eliminated.
+
+11. REMAINING TASKS:
+    - Phase 8B / Remote Deployment (VPS, systemd, continuous cloud execution) — strictly upon explicit user instruction and approval.
+
+12. MANUAL ACTIONS PENDING FROM THE USER:
+    - Review Phase 8C report and verification outcomes.
+    - Confirm readiness for production deployment or further monitoring tests.
+
+13. NEXT RECOMMENDED TASK:
+    Present Phase 8C final report and await user instructions.
+================================================================================

@@ -31,7 +31,9 @@ stream:
 detection:
   # Startup calibration period: number of initial sampled frames to catalog
   # existing trades as BASELINE without triggering Telegram notifications
-  baseline_calibration_frames: 10
+  baseline_calibration_frames: 15
+  # Relaxed OCR confidence during baseline calibration to capture noisy initial text
+  calibration_min_confidence: 0.45
   # Minimum bounding box area (in pixels) to consider as a valid trade candidate
   min_box_area: 400
   # Intersection-over-Union (IoU) threshold to associate detections with existing trades
@@ -42,8 +44,11 @@ detection:
   min_confidence: 0.70
   # Detector A: Chart region of interest [x1, y1, x2, y2] to exclude news tickers
   # Optimized LabelDetector ROI: [x1, y1, x2, y2]
-  # Covers chart area and Position indicator widget while excluding static price scales & timeline numbers
+  # Covers chart area while excluding static price scales & timeline numbers
   label_roi: [0, 50, 1025, 450]
+  # Excluded regions: static UI HUD / analytics panels on the stream (e.g. Current Position HUD)
+  excluded_rois:
+    - [940, 370, 1280, 480]
   # Detector A: Spatial matching distance threshold for tracking labels
   label_max_spatial_distance_px: 45.0
   # Detector A: Max consecutive missing frames before label is pruned from tracker
