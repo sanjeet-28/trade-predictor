@@ -49,10 +49,14 @@ def backup_database(
     t0 = time.perf_counter()
 
     # Use SQLite native online backup API
-    with sqlite3.connect(src) as src_conn:
-        with sqlite3.connect(dest) as dest_conn:
-            # Performs atomic backup in 100-page chunks without locking readers/writers
-            src_conn.backup(dest_conn, pages=100)
+    src_conn = sqlite3.connect(src)
+    dest_conn = sqlite3.connect(dest)
+    try:
+        # Performs atomic backup in 100-page chunks without locking readers/writers
+        src_conn.backup(dest_conn, pages=100)
+    finally:
+        dest_conn.close()
+        src_conn.close()
 
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
     backup_size = os.path.getsize(dest)
@@ -100,17 +104,24 @@ def restore_database(backup_file: str, target_db: Optional[str] = None) -> None:
         logger.info("Created pre-restore safety copy at %s", safety_path)
 
     # Use SQLite online backup API in reverse
-    with sqlite3.connect(backup_file) as src_conn:
-        with sqlite3.connect(target) as dest_conn:
-            src_conn.backup(dest_conn, pages=100)
+    src_conn = sqlite3.connect(backup_file)
+    dest_conn = sqlite3.connect(target)
+    try:
+        src_conn.backup(dest_conn, pages=100)
+    finally:
+        dest_conn.close()
+        src_conn.close()
 
     logger.info("Database restoration complete. Verifying schema integrity...")
-    with sqlite3.connect(target) as conn:
+    conn = sqlite3.connect(target)
+    try:
         res = conn.execute("PRAGMA integrity_check;").fetchone()
         if res and res[0] == "ok":
             logger.info("Database integrity verified: OK")
         else:
             raise RuntimeError(f"Database integrity check failed: {res}")
+    finally:
+        conn.close()
 
 
 def main() -> int:

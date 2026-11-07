@@ -108,7 +108,8 @@ def main() -> int:
         return 0 if success else 1
 
     # Check credentials if running in live mode (not dry-run and not simulate)
-    is_dry_run = args.dry_run or args.simulate
+    env_dry_run = os.environ.get("DRY_RUN", "").strip().lower() in ("true", "1", "yes")
+    is_dry_run = args.dry_run or args.simulate or env_dry_run
     if not is_dry_run:
         if not config.telegram.bot_token or not config.telegram.chat_id:
             logger.warning(

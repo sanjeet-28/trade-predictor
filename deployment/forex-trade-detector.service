@@ -27,6 +27,7 @@ RestartSec=10s
 # Resource boundaries
 LimitNOFILE=65536
 LimitNPROC=4096
+CPUQuota=180%
 MemoryHigh=1500M
 MemoryMax=2048M
 
