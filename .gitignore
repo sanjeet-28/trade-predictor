@@ -6,6 +6,7 @@ ENV/
 
 # Environment Variables & Secrets
 .env
+.env.example
 *.env.local
 
 # Python Cache & Bytecode

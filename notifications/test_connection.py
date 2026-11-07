@@ -19,6 +19,11 @@ from notifications.telegram_notifier import mask_token, sanitize_url
 __test__ = False
 
 
+def run_connection_test() -> bool:
+    """Test Telegram Bot credentials and send a test message."""
+    return test_telegram_connection()
+
+
 def test_telegram_connection() -> bool:
     """Test Telegram Bot credentials and send a test message."""
     print("=" * 70)
