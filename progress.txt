@@ -1581,3 +1581,72 @@ FOREX TRADE DETECTION & TELEGRAM NOTIFICATION SYSTEM - PROGRESS TRACKER
 13. NEXT RECOMMENDED TASK:
     Await user authorization before initiating the first Colab live-stream monitoring session.
 ================================================================================
+
+[SESSION 11 - 2026-11-08: COLAB CELL 8 STREAMRESOLVER CONSTRUCTOR FIX]
+
+1. CURRENT DATE AND TIME:
+   2026-11-08 16:00:00 IST (UTC+5:30)
+
+2. PHASE AND TASK COMPLETED:
+   Hotfix: Google Colab Cell 8 StreamResolver Constructor Alignment
+   - Problem Identified: Cell 8 in `notebooks/Forex_Trade_Detector.ipynb` threw `TypeError: StreamResolver.__init__() got an unexpected keyword argument 'config'`.
+   - Inspection: Inspected `stream/resolver.py` and determined `StreamResolver.__init__()` takes `(primary_url, channel_url=None, preferred_height=720, max_retries=4, initial_backoff_sec=2.0, backoff_multiplier=2.0)`.
+   - Notebook Cell 8 Correction: Updated `scripts/generate_notebook.py` and regenerated `notebooks/Forex_Trade_Detector.ipynb` so Cell 8 explicitly calls:
+     ```python
+     resolver = StreamResolver(
+         primary_url=stream_cfg.primary_url,
+         channel_url=stream_cfg.channel_url,
+         preferred_height=720,
+     )
+     ```
+   - Class Robustness: Enhanced `StreamResolver.__init__()` in `stream/resolver.py` to optionally accept `config: Optional[Any] = None` (`StreamConfig` or `AppConfig`), extracting `primary_url`, `channel_url`, and `frame_height` defensively while raising `ValueError` if no valid URL is supplied.
+   - Regression Tests Added:
+     - Added `test_stream_resolver_constructor_variants` in `tests/test_stream_resolver.py` testing explicit parameters, `StreamConfig`, `AppConfig`, and missing URL error handling.
+     - Added `test_cell_8_stream_resolver_execution` in `tests/test_colab_integration.py` verifying that Cell 8 source parses and executes cleanly with a mocked stream resolution.
+   - Dual-Runtime Full Suite: Ran all 163 tests across Python 3.12 (163/163 passed) and Python 3.13 (163/163 passed).
+
+3. FILES CREATED:
+   None.
+
+4. FILES MODIFIED:
+   - stream/resolver.py
+   - scripts/generate_notebook.py
+   - notebooks/Forex_Trade_Detector.ipynb
+   - tests/test_stream_resolver.py
+   - tests/test_colab_integration.py
+   - progress.txt
+
+5. FILES DELETED:
+   None.
+
+6. DEPENDENCIES INSTALLED, UPGRADED OR REMOVED:
+   None.
+
+7. COMMANDS EXECUTED:
+   - python scripts/generate_notebook.py
+   - pytest tests/test_stream_resolver.py tests/test_colab_integration.py (13/13 passed on Python 3.12 and 3.13)
+   - pytest -q (163/163 passed on Python 3.12, 163/163 passed on Python 3.13)
+   - git status / git diff / git add / git commit / git push
+
+8. TESTS PERFORMED AND THEIR RESULTS:
+   - `test_stream_resolver_constructor_variants` (PASSED on Python 3.12 and Python 3.13)
+   - `test_cell_8_stream_resolver_execution` (PASSED on Python 3.12 and Python 3.13)
+   - Full test suite: 163 passed in 84.83s on Python 3.12 (100%), 163 passed in 52.47s on Python 3.13 (100%).
+
+9. ERRORS ENCOUNTERED AND THEIR RESOLUTIONS:
+   - Error: `TypeError: StreamResolver.__init__() got an unexpected keyword argument 'config'`.
+     Resolution: Corrected Cell 8 in `scripts/generate_notebook.py` and `notebooks/Forex_Trade_Detector.ipynb`, and added optional `config` support to `StreamResolver.__init__()`.
+
+10. CURRENT IMPLEMENTATION STATUS:
+    Cell 8 constructor mismatch is 100% resolved, tested, and verified on Python 3.12 and 3.13.
+
+11. REMAINING TASKS:
+    - User executes Cells 1 through 8 in Google Colab.
+
+12. MANUAL ACTIONS PENDING FROM THE USER:
+    - Open `notebooks/Forex_Trade_Detector.ipynb` in Google Colab.
+    - Run Cells 1 through 8 in safe DRY_RUN mode.
+
+13. NEXT RECOMMENDED TASK:
+    Await user authorization before initiating the first Colab live-stream monitoring session.
+================================================================================

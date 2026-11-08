@@ -209,3 +209,40 @@ def test_ffmpeg_clean_stop_on_orchestrator_stop():
 
     orchestrator.stop()
     mock_pipeline.stop.assert_called_once()
+
+
+def test_cell_8_stream_resolver_execution():
+    """Regression test: verify Cell 8 code in notebook instantiates StreamResolver and executes without TypeError."""
+    nb_path = Path("notebooks/Forex_Trade_Detector.ipynb")
+    assert nb_path.exists()
+    with open(nb_path, "r", encoding="utf-8") as f:
+        nb = json.load(f)
+
+    code_cells = [c for c in nb["cells"] if c["cell_type"] == "code"]
+    # Cell 8 is the 8th code cell (index 7)
+    cell_8 = code_cells[7]
+    cell_8_src = "".join(cell_8["source"])
+
+    assert "StreamResolver" in cell_8_src
+    # Ensure invalid constructor usage config=stream_cfg is not present
+    assert "StreamResolver(config=" not in cell_8_src
+
+    # Mock StreamResolver.resolve so test doesn't make live YouTube network calls
+    with patch("stream.resolver.StreamResolver.resolve") as mock_resolve:
+        from stream.resolver import StreamResolution
+        mock_resolve.return_value = StreamResolution(
+            stream_url="https://manifest.googlevideo.com/mock_m3u8",
+            width=1280,
+            height=720,
+            format_id="232",
+            resolved_at=datetime.now(timezone.utc),
+            is_live=True,
+        )
+
+        global_scope = {}
+        # Execute cell source to verify clean execution
+        exec(cell_8_src, global_scope)
+
+        assert "stream_info" in global_scope
+        assert global_scope["stream_info"].format_id == "232"
+

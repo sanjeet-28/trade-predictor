@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 import pytest
 
+from core.config import AppConfig, StreamConfig
 from stream.resolver import (
     StreamOfflineError,
     StreamResolution,
@@ -165,4 +166,39 @@ def test_resolve_transient_retry_and_backoff(mock_formats) -> None:
         resolution = resolver.resolve()
         assert resolution.format_id == "232"
         assert mock_instance.extract_info.call_count == 3
+
+
+def test_stream_resolver_constructor_variants() -> None:
+    """Verify StreamResolver accepts both direct arguments and config objects without TypeError."""
+    stream_cfg = StreamConfig(
+        primary_url="https://www.youtube.com/watch?v=3H4IVQejlDE",
+        channel_url="https://www.youtube.com/@DTradingTips",
+        frame_height=720,
+    )
+
+    # 1. Standard explicit arguments (Cell 8 pattern)
+    r1 = StreamResolver(
+        primary_url=stream_cfg.primary_url,
+        channel_url=stream_cfg.channel_url,
+        preferred_height=720,
+    )
+    assert r1.primary_url == "https://www.youtube.com/watch?v=3H4IVQejlDE"
+    assert r1.channel_url == "https://www.youtube.com/@DTradingTips"
+    assert r1.preferred_height == 720
+
+    # 2. Config object as keyword argument (StreamConfig)
+    r2 = StreamResolver(config=stream_cfg)
+    assert r2.primary_url == "https://www.youtube.com/watch?v=3H4IVQejlDE"
+    assert r2.channel_url == "https://www.youtube.com/@DTradingTips"
+    assert r2.preferred_height == 720
+
+    # 3. Config object as keyword argument (AppConfig)
+    app_cfg = AppConfig()
+    r3 = StreamResolver(config=app_cfg)
+    assert r3.primary_url == app_cfg.stream.primary_url
+
+    # 4. Missing primary URL raises ValueError
+    with pytest.raises(ValueError, match="StreamResolver requires a valid primary_url"):
+        StreamResolver()
+
 

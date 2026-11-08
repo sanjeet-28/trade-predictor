@@ -58,13 +58,26 @@ class StreamResolver:
 
     def __init__(
         self,
-        primary_url: str,
+        primary_url: Optional[str] = None,
         channel_url: Optional[str] = None,
         preferred_height: int = 720,
         max_retries: int = 4,
         initial_backoff_sec: float = 2.0,
         backoff_multiplier: float = 2.0,
+        config: Optional[Any] = None,
     ) -> None:
+        if config is not None:
+            stream_cfg = getattr(config, "stream", config)
+            if primary_url is None:
+                primary_url = getattr(stream_cfg, "primary_url", None)
+            if channel_url is None:
+                channel_url = getattr(stream_cfg, "channel_url", None)
+            if hasattr(stream_cfg, "frame_height") and preferred_height == 720:
+                preferred_height = int(getattr(stream_cfg, "frame_height"))
+
+        if not primary_url:
+            raise ValueError("StreamResolver requires a valid primary_url or config with primary_url.")
+
         self.primary_url = primary_url
         self.channel_url = channel_url
         self.preferred_height = preferred_height
