@@ -40,7 +40,7 @@ https://colab.research.google.com/github/sanjeet-28/trade-predictor/blob/main/no
 1. **Cell 1**: Verifies Python 3.10+ and standard CPU runtime.
 2. **Cell 2**: Authorizes and mounts your Google Drive (`/content/drive/MyDrive/ForexTradeDetector`).
 3. **Cell 3**: Clones the latest code from GitHub into `/content/trade_predictor`.
-4. **Cell 4**: Installs Linux dependencies (`rapidocr-onnxruntime`, `opencv-python-headless`, `yt-dlp`).
+4. **Cell 4**: Installs Linux dependencies with dual Python 3.12 and 3.13 support (`rapidocr` + `onnxruntime` for Python >= 3.13, `rapidocr-onnxruntime` for Python < 3.13, `opencv-python-headless`, `yt-dlp`).
 5. **Cell 5**: Verifies system FFmpeg.
 6. **Cell 6**: Configures monitoring duration and safety gate:
    * `MONITORING_DURATION_MINUTES = 60` (choose 1 to 180 minutes).
@@ -75,3 +75,4 @@ After each session, the following files are saved to your Google Drive in `MyDri
 1. **No Keep-Alive Hacks**: Do not implement automated page-clickers, keep-alive loops, or reconnection scripts. Google Colab Free is intended for interactive, human-supervised sessions.
 2. **Session Lifetimes**: Colab Free runtimes have a maximum execution duration of up to 12 hours and disconnect if left idle for ~30 minutes. Keep your monitoring sessions between 1 and 3 hours.
 3. **Database Integrity**: Always let Cell 12 run to completion so that the final state is synced to your Google Drive.
+

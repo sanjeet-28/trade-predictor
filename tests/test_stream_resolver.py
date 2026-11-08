@@ -1,5 +1,6 @@
 """Unit tests for YouTube stream manifest resolver using yt-dlp."""
 
+import time
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 import pytest
@@ -16,24 +17,25 @@ from stream.resolver import (
 @pytest.fixture
 def mock_formats() -> list:
     """Mock HLS formats returned by yt-dlp."""
+    exp = int(time.time()) + 21600
     return [
         {
             "format_id": "229",
             "height": 240,
             "width": 426,
-            "url": "https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/1794019800/itag/229/playlist.m3u8",
+            "url": f"https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/{exp}/itag/229/playlist.m3u8",
         },
         {
             "format_id": "232",
             "height": 720,
             "width": 1280,
-            "url": "https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/1794019800/itag/232/playlist.m3u8",
+            "url": f"https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/{exp}/itag/232/playlist.m3u8",
         },
         {
             "format_id": "270",
             "height": 1080,
             "width": 1920,
-            "url": "https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/1794019800/itag/270/playlist.m3u8",
+            "url": f"https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/{exp}/itag/270/playlist.m3u8",
         },
     ]
 

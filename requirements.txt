@@ -9,4 +9,6 @@ numpy>=1.26.0
 
 # Phase 3 Visual Processing and OCR Dependencies
 opencv-python>=4.10.0
-rapidocr_onnxruntime>=1.4.0
+rapidocr_onnxruntime>=1.4.0; python_version < "3.13"
+rapidocr>=3.0.0; python_version >= "3.13"
+onnxruntime>=1.17.0; python_version >= "3.13"

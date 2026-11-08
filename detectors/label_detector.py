@@ -16,10 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-try:
-    from rapidocr_onnxruntime import RapidOCR
-except ImportError:
-    RapidOCR = None  # Handled gracefully if not installed in minimal environments
+from detectors.ocr_adapter import OCRAdapter, create_ocr_engine
 
 from core.logger import get_logger
 from core.models import BoundingBox, DetectionEvent, DetectorType, Frame, TradeSignalType
@@ -92,16 +89,16 @@ class LabelDetector:
         self.max_missing_frames = max_missing_frames
         self.scale_factor = scale_factor
 
-        # Initialize OCR engine
+        # Initialize OCR engine via compatibility adapter
         if ocr_engine is not None:
-            self._ocr = ocr_engine
-        elif RapidOCR is not None:
-            # use_cls=False: chart labels are strictly horizontal; skips angle classification for ~140ms saving
-            self._ocr = RapidOCR(use_cls=False)
-            logger.info("RapidOCR ONNX engine initialized for LabelDetector (use_cls=False).")
+            if isinstance(ocr_engine, OCRAdapter):
+                self._ocr = ocr_engine
+            else:
+                self._ocr = OCRAdapter(ocr_engine, engine_type="injected_engine")
         else:
-            self._ocr = None
-            logger.warning("No OCR engine available. LabelDetector will require an injected OCR mock.")
+            self._ocr = create_ocr_engine(use_cls=False)
+            if self._ocr is None:
+                logger.warning("No OCR engine available. LabelDetector will require an injected OCR mock.")
 
         self._tracked_labels: Dict[str, TrackedLabel] = {}
         self._calibration_candidates: Dict[str, Dict[str, Any]] = {}

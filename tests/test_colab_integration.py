@@ -66,7 +66,7 @@ def test_requirements_linux_dependencies():
     req_path = Path("requirements-linux.txt")
     assert req_path.exists()
     content = req_path.read_text(encoding="utf-8")
-    for pkg in ["opencv-python-headless", "rapidocr_onnxruntime", "yt-dlp", "numpy", "PyYAML"]:
+    for pkg in ["opencv-python-headless", "rapidocr_onnxruntime", "rapidocr", "onnxruntime", "yt-dlp", "numpy", "PyYAML"]:
         assert pkg in content, f"Missing {pkg} in requirements-linux.txt"
 
 

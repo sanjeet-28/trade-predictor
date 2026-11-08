@@ -12,5 +12,7 @@ numpy>=1.26.0
 
 # Headless Computer Vision & OCR (no X11 / libGL GUI dependencies required)
 opencv-python-headless>=4.10.0
-rapidocr_onnxruntime>=1.4.0
+rapidocr_onnxruntime>=1.4.0; python_version < "3.13"
+rapidocr>=3.0.0; python_version >= "3.13"
+onnxruntime>=1.17.0; python_version >= "3.13"
 
