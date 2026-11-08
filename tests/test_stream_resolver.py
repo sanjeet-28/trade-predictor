@@ -202,3 +202,103 @@ def test_stream_resolver_constructor_variants() -> None:
         StreamResolver()
 
 
+def test_stream_resolver_unauthenticated_ydl_opts(mock_formats) -> None:
+    """Verify resolver does not include cookiefile in ydl_opts when no cookie_file is provided."""
+    resolver = StreamResolver(
+        primary_url="https://www.youtube.com/watch?v=mock_live",
+        cookie_file=None,
+    )
+    assert resolver.cookie_file is None
+
+    mock_info = {
+        "is_live": True,
+        "live_status": "is_live",
+        "formats": mock_formats,
+    }
+
+    with patch("yt_dlp.YoutubeDL") as mock_ydl_cls:
+        mock_instance = MagicMock()
+        mock_instance.extract_info.return_value = mock_info
+        mock_ydl_cls.return_value.__enter__.return_value = mock_instance
+
+        resolver.resolve()
+
+        assert mock_ydl_cls.call_count == 1
+        opts_used = mock_ydl_cls.call_args[0][0]
+        assert "cookiefile" not in opts_used
+
+
+def test_stream_resolver_authenticated_ydl_opts(tmp_path, mock_formats) -> None:
+    """Verify resolver includes cookiefile in ydl_opts when a valid cookie file exists."""
+    dummy_cookie = tmp_path / "cookies.txt"
+    dummy_cookie.write_text("# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t2147483647\tSID\tmock_val\n")
+
+    resolver = StreamResolver(
+        primary_url="https://www.youtube.com/watch?v=mock_live",
+        cookie_file=str(dummy_cookie),
+    )
+    assert resolver.cookie_file == str(dummy_cookie)
+
+    mock_info = {
+        "is_live": True,
+        "live_status": "is_live",
+        "formats": mock_formats,
+    }
+
+    with patch("yt_dlp.YoutubeDL") as mock_ydl_cls:
+        mock_instance = MagicMock()
+        mock_instance.extract_info.return_value = mock_info
+        mock_ydl_cls.return_value.__enter__.return_value = mock_instance
+
+        resolver.resolve()
+
+        assert mock_ydl_cls.call_count == 1
+        opts_used = mock_ydl_cls.call_args[0][0]
+        assert opts_used.get("cookiefile") == str(dummy_cookie)
+
+
+def test_stream_resolver_nonexistent_cookie_file(tmp_path, caplog) -> None:
+    """Verify resolver handles non-existent cookie file path gracefully by falling back to unauthenticated."""
+    missing_cookie = tmp_path / "does_not_exist_cookies.txt"
+    resolver = StreamResolver(
+        primary_url="https://www.youtube.com/watch?v=mock_live",
+        cookie_file=str(missing_cookie),
+    )
+    assert resolver.cookie_file is None
+    assert "Specified cookie file was not found" in caplog.text
+
+
+def test_stream_resolver_cookie_privacy_and_anti_bot_error(tmp_path, caplog) -> None:
+    """Verify cookie token privacy: secret token never appears in logs, errors or repr, and anti-bot challenge is handled."""
+    secret_token = "TOP_SECRET_SESSION_TOKEN_XYZ987"
+    secret_cookie_file = tmp_path / "super_secret_cookies.txt"
+    secret_cookie_file.write_text(f"# Netscape\n.youtube.com\tTRUE\t/\tTRUE\t0\tHSID\t{secret_token}\n")
+
+    resolver = StreamResolver(
+        primary_url="https://www.youtube.com/watch?v=mock_bot_check",
+        cookie_file=str(secret_cookie_file),
+    )
+
+    # Verify repr/str doesn't expose cookie contents
+    assert secret_token not in str(resolver)
+    assert secret_token not in repr(resolver)
+
+    import yt_dlp.utils
+    with patch("yt_dlp.YoutubeDL") as mock_ydl_cls:
+        mock_instance = MagicMock()
+        mock_instance.extract_info.side_effect = yt_dlp.utils.DownloadError(
+            f"ERROR: [youtube] mock_bot_check: Sign in to confirm you're not a bot (token={secret_token})"
+        )
+        mock_ydl_cls.return_value.__enter__.return_value = mock_instance
+
+        with pytest.raises(StreamUnavailableError) as exc_info:
+            resolver.resolve()
+
+        # Check that error instructs user about cookies without echoing the secret token
+        assert "Sign in to confirm you're not a bot" in str(exc_info.value)
+        assert "Please provide a YouTube cookies.txt file" in str(exc_info.value)
+        assert secret_token not in str(exc_info.value)
+        assert secret_token not in caplog.text
+
+
+

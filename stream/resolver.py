@@ -6,6 +6,7 @@ token expiration detection, automatic cache refresh, and exponential backoff.
 
 from __future__ import annotations
 
+import os
 import time
 import urllib.parse
 from dataclasses import dataclass
@@ -64,6 +65,7 @@ class StreamResolver:
         max_retries: int = 4,
         initial_backoff_sec: float = 2.0,
         backoff_multiplier: float = 2.0,
+        cookie_file: Optional[str] = None,
         config: Optional[Any] = None,
     ) -> None:
         if config is not None:
@@ -74,6 +76,8 @@ class StreamResolver:
                 channel_url = getattr(stream_cfg, "channel_url", None)
             if hasattr(stream_cfg, "frame_height") and preferred_height == 720:
                 preferred_height = int(getattr(stream_cfg, "frame_height"))
+            if cookie_file is None:
+                cookie_file = getattr(stream_cfg, "cookie_file", None)
 
         if not primary_url:
             raise ValueError("StreamResolver requires a valid primary_url or config with primary_url.")
@@ -84,6 +88,23 @@ class StreamResolver:
         self.max_retries = max_retries
         self.initial_backoff_sec = initial_backoff_sec
         self.backoff_multiplier = backoff_multiplier
+
+        # Optional YouTube authentication cookies.
+        # Only retain if the file actually exists on disk.
+        # Never store or log cookie content.
+        if cookie_file and os.path.exists(cookie_file):
+            self.cookie_file: Optional[str] = str(cookie_file)
+            logger.info(
+                "YouTube cookie authentication configured for StreamResolver (file: %s)",
+                os.path.basename(self.cookie_file),
+            )
+        else:
+            self.cookie_file = None
+            if cookie_file:
+                logger.warning(
+                    "Specified cookie file was not found (%s); proceeding unauthenticated.",
+                    os.path.basename(str(cookie_file)),
+                )
 
         self._cached_resolution: Optional[StreamResolution] = None
 
@@ -146,6 +167,8 @@ class StreamResolver:
             "extract_flat": False,
             "skip_download": True,
         }
+        if self.cookie_file and os.path.exists(self.cookie_file):
+            ydl_opts["cookiefile"] = self.cookie_file
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -154,6 +177,11 @@ class StreamResolver:
             msg = str(e).lower()
             if "private" in msg or "unavailable" in msg or "does not exist" in msg or "not available" in msg:
                 raise StreamUnavailableError(f"Stream unavailable: {e}") from e
+            if "sign in" in msg or "bot" in msg:
+                raise StreamUnavailableError(
+                    "YouTube requested user authentication ('Sign in to confirm you're not a bot'). "
+                    "Please provide a YouTube cookies.txt file."
+                ) from e
             raise StreamResolverError(f"Network error extracting stream info: {e}") from e
         except Exception as e:
             raise StreamResolverError(f"Unexpected yt-dlp extraction error: {e}") from e

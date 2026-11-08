@@ -9,6 +9,9 @@ ENV/
 .env
 .env.example
 *.env.local
+*cookie*.txt
+*.cookies
+cookies/
 
 # Python Cache & Bytecode
 __pycache__/

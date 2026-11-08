@@ -44,7 +44,7 @@ def test_notebook_json_and_syntax_validity():
     assert nb["nbformat"] == 4
     assert "cells" in nb
     code_cells = [c for c in nb["cells"] if c["cell_type"] == "code"]
-    assert len(code_cells) == 12, f"Expected 12 code cells, found {len(code_cells)}"
+    assert len(code_cells) == 13, f"Expected 13 code cells, found {len(code_cells)}"
 
     # Validate that every code cell compiles under Python AST
     for idx, cell in enumerate(code_cells, start=1):
@@ -211,21 +211,57 @@ def test_ffmpeg_clean_stop_on_orchestrator_stop():
     mock_pipeline.stop.assert_called_once()
 
 
-def test_cell_8_stream_resolver_execution():
-    """Regression test: verify Cell 8 code in notebook instantiates StreamResolver and executes without TypeError."""
+def test_cell_8_cookie_authentication_cell():
+    """Verify Cell 8 (Cookie Authentication) executes safely and sets ACTIVE_COOKIE_PATH appropriately."""
     nb_path = Path("notebooks/Forex_Trade_Detector.ipynb")
     assert nb_path.exists()
     with open(nb_path, "r", encoding="utf-8") as f:
         nb = json.load(f)
 
     code_cells = [c for c in nb["cells"] if c["cell_type"] == "code"]
-    # Cell 8 is the 8th code cell (index 7)
     cell_8 = code_cells[7]
     cell_8_src = "".join(cell_8["source"])
 
-    assert "StreamResolver" in cell_8_src
+    assert "COOKIE_FILE_PATH" in cell_8_src
+    assert "ACTIVE_COOKIE_PATH" in cell_8_src
+
+    # Test 1: Unauthenticated execution when no cookie file is present
+    scope = {}
+    exec(cell_8_src, scope)
+    assert scope["ACTIVE_COOKIE_PATH"] is None
+
+    # Test 2: Authenticated execution when cookie file is present
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mock_cookie_path = Path(tmpdir) / "test_cookies.txt"
+        mock_cookie_path.write_text("# Netscape HTTP Cookie File\n")
+
+        # Temporarily patch COOKIE_FILE_PATH in source execution
+        scope2 = {"COOKIE_FILE_PATH": mock_cookie_path}
+        # Run cell with patched target
+        custom_src = cell_8_src.replace(
+            'COOKIE_FILE_PATH = Path("/content/youtube_cookies.txt")',
+            f'COOKIE_FILE_PATH = Path(r"{mock_cookie_path}")',
+        )
+        exec(custom_src, scope2)
+        assert scope2["ACTIVE_COOKIE_PATH"] == str(mock_cookie_path)
+
+
+def test_cell_9_stream_resolver_execution():
+    """Regression test: verify Cell 9 code in notebook instantiates StreamResolver and executes without TypeError."""
+    nb_path = Path("notebooks/Forex_Trade_Detector.ipynb")
+    assert nb_path.exists()
+    with open(nb_path, "r", encoding="utf-8") as f:
+        nb = json.load(f)
+
+    code_cells = [c for c in nb["cells"] if c["cell_type"] == "code"]
+    # Cell 9 is the 9th code cell (index 8)
+    cell_9 = code_cells[8]
+    cell_9_src = "".join(cell_9["source"])
+
+    assert "StreamResolver" in cell_9_src
     # Ensure invalid constructor usage config=stream_cfg is not present
-    assert "StreamResolver(config=" not in cell_8_src
+    assert "StreamResolver(config=" not in cell_9_src
+    assert "cookie_file=ACTIVE_COOKIE_PATH" in cell_9_src
 
     # Mock StreamResolver.resolve so test doesn't make live YouTube network calls
     with patch("stream.resolver.StreamResolver.resolve") as mock_resolve:
@@ -239,10 +275,27 @@ def test_cell_8_stream_resolver_execution():
             is_live=True,
         )
 
-        global_scope = {}
+        global_scope = {"ACTIVE_COOKIE_PATH": None}
         # Execute cell source to verify clean execution
-        exec(cell_8_src, global_scope)
+        exec(cell_9_src, global_scope)
 
         assert "stream_info" in global_scope
         assert global_scope["stream_info"].format_id == "232"
+
+
+def test_cell_13_cookie_cleanup():
+    """Verify Cell 13 contains cookie file cleanup logic."""
+    nb_path = Path("notebooks/Forex_Trade_Detector.ipynb")
+    assert nb_path.exists()
+    with open(nb_path, "r", encoding="utf-8") as f:
+        nb = json.load(f)
+
+    code_cells = [c for c in nb["cells"] if c["cell_type"] == "code"]
+    # Cell 13 is the 13th code cell (index 12)
+    cell_13 = code_cells[12]
+    cell_13_src = "".join(cell_13["source"])
+
+    assert "youtube_cookies.txt" in cell_13_src
+    assert "os.remove" in cell_13_src
+
 

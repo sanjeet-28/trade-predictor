@@ -47,22 +47,41 @@ https://colab.research.google.com/github/sanjeet-28/trade-predictor/blob/main/no
    * `DRY_RUN = True` (keep `True` to test without sending real messages).
    * `ENABLE_LIVE_NOTIFICATIONS = False` (set `True` only when ready for real alerts).
 7. **Cell 7**: Scans Google Drive and restores the latest database backup if one exists from a previous session.
-8. **Cell 8**: Resolves the live YouTube stream and confirms 1280x720 video feed availability.
-9. **Cell 9**: Initializes the runtime configuration.
-10. **Cell 10**: Starts live trade monitoring. You will see real-time frame and trade logs in the cell output.
-11. **Cell 11**: Displays a summary of frames processed, trades activated, and outbox records.
-12. **Cell 12**: Cleanly stops FFmpeg, executes an atomic SQLite online backup, copies the snapshot to Google Drive, and verifies its schema integrity.
+8. **Cell 8**: Optional YouTube Cookie Authentication. If YouTube shows "Sign in to confirm you're not a bot", provide an exported Netscape-format `cookies.txt` to authenticate yt-dlp safely.
+9. **Cell 9**: Resolves the live YouTube stream and confirms 1280x720 video feed availability.
+10. **Cell 10**: Initializes the runtime configuration.
+11. **Cell 11**: Starts live trade monitoring. You will see real-time frame and trade logs in the cell output.
+12. **Cell 12**: Displays a summary of frames processed, trades activated, and outbox records.
+13. **Cell 13**: Cleanly stops FFmpeg, executes an atomic SQLite online backup, copies the snapshot to Google Drive, and securely wipes temporary cookies.
 
 ---
 
-## 3. Session Controls & Stopping
+## 3. YouTube Cookie Authentication (Optional)
+
+If YouTube presents an anti-bot challenge on Colab's cloud IP addresses (`Sign in to confirm you're not a bot`):
+1. Export cookies for `youtube.com` into Netscape format (`cookies.txt`) using a standard browser extension (such as *Get cookies.txt LOCALLY*).
+2. In **Cell 8**, either:
+   * Set `UPLOAD_COOKIES_NOW = True` to open an interactive file upload prompt directly in Colab, or
+   * Upload `cookies.txt` or `youtube_cookies.txt` into `/content/` using the Colab file browser.
+3. The detector will automatically pass the temporary cookie file to yt-dlp for stream resolution.
+
+> [!IMPORTANT]
+> **Strict Privacy Guarantee**:
+> - Cookie files are permanently excluded from Git (`.gitignore`).
+> - Cookie contents are never logged, displayed in cell outputs, or included in exceptions.
+> - Cookies are kept strictly in temporary Colab runtime storage (`/content/`) and are **never** copied to Google Drive, SQLite, or configuration files.
+> - Cell 13 securely wipes all temporary cookie files upon session completion.
+
+---
+
+## 4. Session Controls & Stopping
 
 * **Automatic Duration Stop**: The session will stop automatically after `MONITORING_DURATION_MINUTES` has elapsed.
-* **Manual Interrupt**: You can click the **Stop button** on Cell 10 (or interrupt the kernel) at any time. The `TradeDetectionOrchestrator` will catch `KeyboardInterrupt`, stop FFmpeg cleanly, flush records, and proceed to Cell 12 for the final backup.
+* **Manual Interrupt**: You can click the **Stop button** on Cell 11 (or interrupt the kernel) at any time. The `TradeDetectionOrchestrator` will catch `KeyboardInterrupt`, stop FFmpeg cleanly, flush records, and proceed to Cell 13 for the final backup and cookie wipe.
 
 ---
 
-## 4. Persistent Artifacts on Google Drive
+## 5. Persistent Artifacts on Google Drive
 
 After each session, the following files are saved to your Google Drive in `MyDrive/ForexTradeDetector/`:
 * `backups/trade_state_backup_YYYYMMDD_HHMMSS.db`: Timestamped point-in-time database snapshots.
@@ -70,9 +89,9 @@ After each session, the following files are saved to your Google Drive in `MyDri
 
 ---
 
-## 5. Important Compliance & Best Practices
+## 6. Important Compliance & Best Practices
 
 1. **No Keep-Alive Hacks**: Do not implement automated page-clickers, keep-alive loops, or reconnection scripts. Google Colab Free is intended for interactive, human-supervised sessions.
 2. **Session Lifetimes**: Colab Free runtimes have a maximum execution duration of up to 12 hours and disconnect if left idle for ~30 minutes. Keep your monitoring sessions between 1 and 3 hours.
-3. **Database Integrity**: Always let Cell 12 run to completion so that the final state is synced to your Google Drive.
+3. **Database Integrity**: Always let Cell 13 run to completion so that the final state is synced to your Google Drive and temporary cookies are wiped.
 

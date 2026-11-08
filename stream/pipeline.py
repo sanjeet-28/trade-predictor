@@ -38,6 +38,7 @@ class StreamPipeline:
             channel_url=config.stream.channel_url,
             preferred_height=int(getattr(config.stream, "frame_height", 720)),
             initial_backoff_sec=config.stream.reconnect_backoff_initial_sec,
+            cookie_file=getattr(config.stream, "cookie_file", None),
         )
 
         self.health_monitor = health_monitor or StreamHealthMonitor(

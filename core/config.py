@@ -38,6 +38,7 @@ class StreamConfig:
     black_frame_threshold: float = 2.0
     max_frame_delay_sec: float = 10.0
     local_video_path: Optional[str] = None
+    cookie_file: Optional[str] = None
 
 
 @dataclass
@@ -201,6 +202,7 @@ def load_config(
         black_frame_threshold=float(stream_data.get("black_frame_threshold", StreamConfig.black_frame_threshold)),
         max_frame_delay_sec=float(stream_data.get("max_frame_delay_sec", StreamConfig.max_frame_delay_sec)),
         local_video_path=os.getenv("LOCAL_VIDEO_PATH") or stream_data.get("local_video_path"),
+        cookie_file=os.getenv("YOUTUBE_COOKIE_FILE") or os.getenv("COOKIE_FILE") or stream_data.get("cookie_file"),
     )
 
     roi_val = detection_data.get("label_roi", DetectionConfig.label_roi)

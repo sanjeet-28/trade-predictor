@@ -1650,3 +1650,97 @@ FOREX TRADE DETECTION & TELEGRAM NOTIFICATION SYSTEM - PROGRESS TRACKER
 13. NEXT RECOMMENDED TASK:
     Await user authorization before initiating the first Colab live-stream monitoring session.
 ================================================================================
+
+[SESSION 12 - 2026-11-08: GOOGLE COLAB OPTIONAL YOUTUBE COOKIE AUTHENTICATION]
+
+1. CURRENT DATE AND TIME:
+   2026-11-08 16:25:00 IST (UTC+5:30)
+
+2. PHASE AND TASK COMPLETED:
+   Implementation of Optional YouTube Cookie Authentication for Google Colab with Strict Privacy Safeguards
+   - Objective: Address yt-dlp anti-bot challenge on Colab datacenter IPs (`Sign in to confirm you're not a bot`) without bypassing security, exposing secrets, or storing credentials.
+   - Git Protection: Added `*cookie*.txt`, `*.cookies`, `cookies/` to `.gitignore`. Verified exclusion via `git check-ignore`.
+   - Core Configuration (`core/config.py`):
+     - Extended `StreamConfig` with optional `cookie_file: Optional[str] = None`.
+     - Enabled environment variable overrides via `YOUTUBE_COOKIE_FILE` and `COOKIE_FILE`.
+   - Stream Manifest Resolver (`stream/resolver.py`):
+     - Added `cookie_file: Optional[str] = None` parameter to `StreamResolver.__init__()` and forwarded from `config.stream`.
+     - Added file existence verification: only assigns `self.cookie_file` if the file exists on local disk.
+     - Logs only `os.path.basename(self.cookie_file)`, never cookie content.
+     - Passed `ydl_opts["cookiefile"] = self.cookie_file` into `yt_dlp.YoutubeDL`.
+     - Added sanitized handling of anti-bot `DownloadError` (`sign in` or `bot` in message) converting it to `StreamUnavailableError` with guidance to supply a `cookies.txt` file without echoing tokens.
+   - Stream Pipeline (`stream/pipeline.py`): Forwarded `cookie_file` from `StreamConfig` to `StreamResolver`.
+   - Colab Notebook Updates (`scripts/generate_notebook.py` -> `notebooks/Forex_Trade_Detector.ipynb`):
+     - Added **Cell 8 (Optional YouTube Cookie Authentication)**: Automatically detects `/content/youtube_cookies.txt` or `/content/cookies.txt`, supports optional interactive upload via `files.upload()`, and defines `ACTIVE_COOKIE_PATH`.
+     - Updated **Cell 9 (Stream Connection Pre-Check)**: Passes `cookie_file=ACTIVE_COOKIE_PATH` to `StreamResolver`.
+     - Updated **Cell 10 (Runtime Configuration)**: Sets `config.stream.cookie_file = ACTIVE_COOKIE_PATH`.
+     - Updated **Cell 13 (Clean Teardown)**: Added cleanup logic that securely deletes `/content/youtube_cookies.txt` and `/content/cookies.txt` on session termination.
+   - Documentation (`docs/COLAB_GUIDE.md`):
+     - Added detailed Section 3 explaining cookie export instructions and privacy assurances.
+     - Re-indexed cells from 12 to 13 code cells.
+   - Comprehensive Automated Regression Testing:
+     - Added unit tests in `tests/test_stream_resolver.py`:
+       - `test_stream_resolver_unauthenticated_ydl_opts`: Verifies no cookiefile in opts when unauthenticated.
+       - `test_stream_resolver_authenticated_ydl_opts`: Verifies `cookiefile` passed to yt-dlp opts.
+       - `test_stream_resolver_nonexistent_cookie_file`: Verifies graceful fallback and warning log when cookie file missing.
+       - `test_stream_resolver_cookie_privacy_and_anti_bot_error`: Verifies secret tokens never appear in logs, error messages, or `repr()`, and anti-bot challenge is converted cleanly.
+     - Updated integration tests in `tests/test_colab_integration.py`:
+       - `test_notebook_json_and_syntax_validity`: Validates all 13 cells conform to nbformat v4 and compile.
+       - `test_cell_8_cookie_authentication_cell`: Validates unauthenticated and authenticated flows.
+       - `test_cell_9_stream_resolver_execution`: Validates resolution with `ACTIVE_COOKIE_PATH`.
+       - `test_cell_13_cookie_cleanup`: Validates cookie file deletion logic.
+     - Full Test Suite: Executed 169 unit and regression tests on Python 3.12 (169/169 passed) and Colab/Stream tests on Python 3.13 (19/19 passed).
+
+3. FILES CREATED:
+   None.
+
+4. FILES MODIFIED:
+   - .gitignore
+   - core/config.py
+   - docs/COLAB_GUIDE.md
+   - notebooks/Forex_Trade_Detector.ipynb
+   - scripts/generate_notebook.py
+   - stream/pipeline.py
+   - stream/resolver.py
+   - tests/test_colab_integration.py
+   - tests/test_stream_resolver.py
+   - progress.txt
+
+5. FILES DELETED:
+   None.
+
+6. DEPENDENCIES INSTALLED, UPGRADED OR REMOVED:
+   None.
+
+7. COMMANDS EXECUTED:
+   - git status
+   - git check-ignore -v youtube_cookies.txt cookies.txt foo_cookie.txt test.cookies cookies/mycookie.txt
+   - .venv\Scripts\python.exe scripts/generate_notebook.py
+   - .venv\Scripts\pytest.exe tests/test_stream_resolver.py (10/10 passed)
+   - .venv\Scripts\pytest.exe tests/test_colab_integration.py (9/9 passed)
+   - .venv\Scripts\pytest.exe -q (169 passed in 85.67s on Python 3.12)
+   - .venv313\Scripts\pytest.exe tests/test_stream_resolver.py tests/test_colab_integration.py (19 passed on Python 3.13)
+
+8. TESTS PERFORMED AND THEIR RESULTS:
+   - tests/test_stream_resolver.py: 10/10 passed (including 4 new cookie and anti-bot tests).
+   - tests/test_colab_integration.py: 9/9 passed (13 cells nbformat/syntax, cookie loading, resolver execution, cookie cleanup).
+   - Full test suite: 169 passed in 85.67s on Python 3.12 (100% pass rate).
+   - Python 3.13 regression suite: 19/19 passed on Python 3.13.0.
+
+9. ERRORS ENCOUNTERED AND THEIR RESOLUTIONS:
+   - Error: Initial run of new cookie tests in `test_stream_resolver.py` raised `NameError: name 'os' is not defined`.
+     Resolution: Added `import os` to `stream/resolver.py`.
+
+10. CURRENT IMPLEMENTATION STATUS:
+    Optional YouTube cookie authentication is fully implemented with strict privacy guarantees, excluded from Git, covered by unit and integration tests, documented in COLAB_GUIDE.md, and validated across both Python 3.12 and Python 3.13.
+
+11. REMAINING TASKS:
+    - User runs Cells 1 through 9 in Google Colab (with optional `cookies.txt` upload if YouTube prompts for authentication).
+
+12. MANUAL ACTIONS PENDING FROM THE USER:
+    - Open `notebooks/Forex_Trade_Detector.ipynb` in Google Colab.
+    - If YouTube requests sign-in ("Sign in to confirm you're not a bot"), export `cookies.txt` from a desktop browser and upload in Cell 8.
+
+13. NEXT RECOMMENDED TASK:
+    Run the Colab notebook with Cell 8 cookie authentication if required, verifying stream resolution in Cell 9.
+================================================================================
